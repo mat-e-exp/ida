@@ -1,4 +1,4 @@
-# IDA — Internally Developed Apps
+# IDA
 
 ## What It Is
 
