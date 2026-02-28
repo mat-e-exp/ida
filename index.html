@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IDA — Internally Developed Apps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0d0f1a;
+    --bg-light: #141728;
+    --pastel-blue: #7eb8da;
+    --pastel-pink: #e8a0bf;
+    --pastel-green: #a0d995;
+    --pastel-purple: #b8a0e8;
+    --pastel-orange: #e8c4a0;
+    --pastel-teal: #7ed4c0;
+    --pastel-yellow: #e8dfa0;
+    --pastel-red: #e8a0a0;
+    --text: #c8cce0;
+    --text-dim: #6a6f8a;
+    --text-bright: #e8eaf4;
+    --border: rgba(255,255,255,0.06);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  canvas#bg-canvas {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%; z-index: 0;
+  }
+
+  /* ── IDA intro paragraph ── */
+  .ida-intro {
+    position: fixed; top: 24px; left: 24px; z-index: 350;
+    max-width: 320px; padding: 16px 20px;
+    background: rgba(13,15,26,0.85); border: 1px solid var(--border);
+    border-radius: 14px; backdrop-filter: blur(12px);
+    transition: all 0.5s ease;
+  }
+  .ida-intro.shifted { top: 70px; }
+  .ida-intro-title {
+    font-family: 'Sora', sans-serif; font-size: 0.9rem; font-weight: 700;
+    color: var(--pastel-blue); margin-bottom: 8px; letter-spacing: 0.06em;
+  }
+  .ida-intro-text {
+    font-size: 0.6rem; line-height: 1.7; color: var(--text-dim);
+  }
+  .ida-intro-pillars {
+    display: flex; gap: 8px; margin-top: 10px;
+  }
+  .ida-pillar {
+    font-size: 0.46rem; padding: 3px 10px; border-radius: 20px;
+    letter-spacing: 0.06em; font-weight: 600; text-transform: uppercase;
+  }
+  .ida-pillar.orch { background: rgba(160,217,149,0.1); color: var(--pastel-green); border: 1px solid rgba(160,217,149,0.2); }
+  .ida-pillar.avail { background: rgba(126,184,218,0.1); color: var(--pastel-blue); border: 1px solid rgba(126,184,218,0.2); }
+  .ida-pillar.gov { background: rgba(232,160,160,0.1); color: var(--pastel-red); border: 1px solid rgba(232,160,160,0.2); }
+
+
+  .back-btn {
+    position: fixed; top: 24px; right: 120px; z-index: 400;
+    background: var(--bg-light); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text-dim);
+    padding: 8px 18px; font-size: 0.7rem; letter-spacing: 0.08em;
+    cursor: pointer; display: none; align-items: center; gap: 6px;
+    transition: all 0.3s;
+  }
+  .back-btn.visible { display: flex; }
+  .back-btn:hover { border-color: var(--pastel-blue); color: var(--pastel-blue); }
+
+  .steps {
+    position: fixed; top: 30px; right: 24px;
+    display: flex; gap: 10px; z-index: 400;
+  }
+  .step-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: rgba(255,255,255,0.08); transition: all 0.5s;
+  }
+  .step-dot.active { background: var(--pastel-blue); box-shadow: 0 0 12px rgba(126,184,218,0.5); }
+  .step-dot.done { background: var(--pastel-green); box-shadow: 0 0 8px rgba(160,217,149,0.3); }
+
+  .tagline {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    font-family: 'Sora', sans-serif; font-size: 0.85rem; font-weight: 500; letter-spacing: 0.22em; z-index: 300;
+  }
+  .t1 { color: var(--pastel-green); animation: tagFade 6s ease-in-out infinite 0s; }
+  .t2 { color: var(--pastel-purple); animation: tagFade 6s ease-in-out infinite 0.3s; }
+  .t3 { color: var(--pastel-pink); animation: tagFade 6s ease-in-out infinite 0.6s; }
+  @keyframes tagFade { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+  /* ── Scene / scroll container ── */
+  .scene {
+    position: relative; z-index: 1;
+    width: 100vw; height: 100vh;
+    overflow-y: auto; overflow-x: hidden;
+    scroll-behavior: smooth;
+  }
+  .scene::-webkit-scrollbar { width: 4px; }
+  .scene::-webkit-scrollbar-track { background: transparent; }
+  .scene::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 4px; }
+
+  .scene-inner {
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 80px 40px 60px;
+    transition: all 0.7s ease;
+  }
+
+  /* ══════════════════
+     STAGE 0: Picker
+     ══════════════════ */
+  .stage-picker {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; min-height: calc(100vh - 140px);
+    transition: all 0.7s cubic-bezier(0.4,0,0.2,1);
+  }
+  .stage-picker.hidden { display: none; }
+
+  .user-block {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 30px; padding: 14px 24px;
+    background: var(--bg-light); border: 1px solid var(--border); border-radius: 16px;
+  }
+  .user-avatar {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--pastel-purple), var(--pastel-blue));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; font-weight: 700; color: var(--bg);
+    animation: avatarGlow 3s ease-in-out infinite;
+  }
+  @keyframes avatarGlow {
+    0%,100% { box-shadow: 0 0 10px rgba(184,160,232,0.2); }
+    50% { box-shadow: 0 0 25px rgba(184,160,232,0.5); }
+  }
+  .user-name { font-family: 'Sora', sans-serif; font-size: 0.85rem; color: var(--text-bright); font-weight: 600; }
+  .user-role { font-size: 0.6rem; color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; }
+
+  .picker-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 16px; max-width: 560px;
+  }
+  .pick-card {
+    background: var(--bg-light); border: 1px solid var(--border);
+    border-radius: 16px; padding: 22px 16px 18px; text-align: center;
+    cursor: pointer; transition: all 0.4s cubic-bezier(0.4,0,0.2,1);
+    position: relative; overflow: hidden;
+  }
+  .pick-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: var(--accent); opacity: 0; transition: opacity 0.3s;
+  }
+  .pick-card:hover {
+    transform: translateY(-5px) scale(1.03);
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.4), 0 0 30px color-mix(in srgb, var(--accent) 15%, transparent);
+  }
+  .pick-card:hover::before { opacity: 1; }
+  .pick-card .p-icon { font-size: 2rem; display: block; margin-bottom: 10px; }
+  .pick-card .p-label { font-family: 'Sora', sans-serif; font-size: 0.65rem; font-weight: 500; line-height: 1.4; color: var(--text-dim); transition: color 0.3s; }
+  .pick-card:hover .p-label { color: var(--accent); }
+  .pick-card:nth-child(1){--accent:var(--pastel-blue)}.pick-card:nth-child(2){--accent:var(--pastel-pink)}
+  .pick-card:nth-child(3){--accent:var(--pastel-green)}.pick-card:nth-child(4){--accent:var(--pastel-purple)}
+  .pick-card:nth-child(5){--accent:var(--pastel-orange)}.pick-card:nth-child(6){--accent:var(--pastel-teal)}
+  .pick-card:nth-child(7){--accent:var(--pastel-yellow)}.pick-card:nth-child(8){--accent:var(--pastel-red)}
+  .picker-hint { margin-top: 24px; font-size: 0.6rem; letter-spacing: 0.18em; color: var(--text-dim); opacity: 0.5; text-transform: uppercase; }
+
+  /* ══════════════════
+     STAGE 1: App (left) + Data Sources (right)
+     ══════════════════ */
+  .stage-row {
+    width: 100%;
+    display: none;
+    transition: all 0.7s ease;
+  }
+  .stage-row.visible { display: block; }
+
+  .stage-row .row-content {
+    display: flex; gap: 0; align-items: stretch;
+    max-width: 1100px; margin: 0 auto;
+    position: relative;
+    transition: all 0.7s ease;
+  }
+
+  /* Scale wrapper for shrinking */
+  .stage-row.shrink-1 .row-content { transform: scale(0.82); transform-origin: top center; margin-bottom: -40px; }
+  .stage-row.shrink-2 .row-content { transform: scale(0.65); transform-origin: top center; margin-bottom: -100px; }
+
+  /* Left panel: app */
+  .app-panel {
+    flex: 0 0 300px;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 20px; padding-right: 30px;
+  }
+
+  .app-big-card {
+    background: var(--bg-light); border: 1px solid var(--border);
+    border-radius: 18px; padding: 24px 20px; text-align: center;
+    width: 100%;
+    animation: cardSlideIn 0.5s ease both;
+  }
+  @keyframes cardSlideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+
+  .app-big-card .abc-icon { font-size: 3rem; display: block; margin-bottom: 10px; }
+  .app-big-card .abc-title { font-family: 'Sora', sans-serif; font-size: 1.1rem; font-weight: 600; margin-bottom: 6px; }
+  .app-big-card .abc-desc { font-size: 0.65rem; color: var(--text-dim); line-height: 1.5; margin-bottom: 10px; }
+  .app-big-card .abc-dev {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.58rem; color: var(--pastel-purple);
+    padding: 4px 12px; background: rgba(184,160,232,0.08);
+    border: 1px solid rgba(184,160,232,0.12); border-radius: 20px;
+  }
+  .abc-dev .dev-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--pastel-green); animation: dotPulse 2s ease-in-out infinite;
+  }
+  @keyframes dotPulse {
+    0%,100% { opacity: 0.4; transform: scale(1); box-shadow: 0 0 0 rgba(160,217,149,0); }
+    50% { opacity: 1; transform: scale(1.4); box-shadow: 0 0 8px rgba(160,217,149,0.3); }
+  }
+
+  /* SVG connection lines (between left and right) */
+  .conn-svg-lr {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 2;
+  }
+  .conn-lr-line { stroke: rgba(126,184,218,0.12); stroke-width: 1.2; fill: none; stroke-dasharray: 5 3; }
+  .conn-lr-line.active { stroke: rgba(126,184,218,0.3); }
+  .conn-lr-dot { fill: var(--pastel-blue); opacity: 0.7; }
+
+  /* Right panel: data sources */
+  .ds-panel {
+    flex: 1; display: flex; flex-direction: column; gap: 10px;
+    padding: 20px; padding-left: 30px;
+    animation: dsSlideIn 0.5s ease 0.15s both;
+  }
+  @keyframes dsSlideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+  .ds-panel-title {
+    font-size: 0.58rem; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--pastel-blue); margin-bottom: 4px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ds-panel-title .dt-bar { flex: 1; height: 1px; background: linear-gradient(to right, rgba(126,184,218,0.2), transparent); }
+
+  .ds-card {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-light); border: 1px solid rgba(126,184,218,0.08);
+    border-radius: 14px;
+    transition: all 0.3s;
+    opacity: 0; transform: translateX(15px);
+  }
+  .ds-card.visible { opacity: 1; transform: translateX(0); }
+  .ds-card:hover { border-color: rgba(126,184,218,0.25); background: rgba(126,184,218,0.04); }
+
+  .ds-card-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    background: rgba(126,184,218,0.08);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem; flex-shrink: 0; position: relative;
+  }
+  .ds-card-icon .rp { position: absolute; width: 100%; height: 100%; border-radius: 12px; border: 1px solid var(--pastel-blue); animation: rp 3s ease-out infinite; opacity: 0; }
+  .ds-card-icon .rp:nth-child(2) { animation-delay: 1s; }
+  @keyframes rp { 0% { transform: scale(1); opacity: 0.35; } 100% { transform: scale(1.7); opacity: 0; } }
+
+  .ds-card-info { flex: 1; }
+  .ds-card-name { font-family: 'Sora', sans-serif; font-size: 0.72rem; font-weight: 500; color: var(--text); margin-bottom: 1px; }
+  .ds-card-sys { font-size: 0.52rem; color: var(--text-dim); }
+  .ds-card-access {
+    font-size: 0.5rem; padding: 3px 10px; border-radius: 20px;
+    letter-spacing: 0.06em; font-weight: 600; white-space: nowrap; flex-shrink: 0;
+  }
+  .ds-card-access.read-only { background: rgba(160,217,149,0.1); color: var(--pastel-green); border: 1px solid rgba(160,217,149,0.25); }
+  .ds-card-access.read-write { background: rgba(232,196,160,0.1); color: var(--pastel-orange); border: 1px solid rgba(232,196,160,0.25); }
+
+  /* ══════════════════
+     Flow connectors between stages
+     ══════════════════ */
+  .flow-connector {
+    display: none; flex-direction: column; align-items: center;
+    width: 100%; padding: 10px 0;
+  }
+  .flow-connector.visible { display: flex; }
+
+  .flow-conn-svg {
+    width: 300px; height: 50px; overflow: visible;
+  }
+  .fc-line {
+    stroke: rgba(184,160,232,0.15); stroke-width: 1.2;
+    fill: none; stroke-dasharray: 5 3;
+  }
+  .fc-dot { fill: var(--pastel-purple); opacity: 0.7; }
+  .fc-dot-blue { fill: var(--pastel-blue); opacity: 0.7; }
+  .fc-line-blue { stroke: rgba(126,184,218,0.15); stroke-width: 1.2; fill: none; stroke-dasharray: 5 3; }
+
+  /* ══════════════════
+     Next Stage / Publish Buttons
+     ══════════════════ */
+  .stage-btn-wrap {
+    display: none; justify-content: center; margin: 8px 0 4px;
+  }
+  .stage-btn-wrap.visible { display: flex; }
+
+  .stage-btn {
+    padding: 12px 36px;
+    border-radius: 30px; border: 1.5px solid;
+    background: transparent; cursor: pointer;
+    font-family: 'Sora', sans-serif; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase;
+    transition: all 0.4s ease;
+    position: relative; overflow: hidden;
+  }
+  .stage-btn::before {
+    content: ''; position: absolute; top: 50%; left: 50%;
+    width: 0; height: 0; border-radius: 50%;
+    transform: translate(-50%,-50%);
+    transition: all 0.5s ease; opacity: 0.1;
+  }
+  .stage-btn:hover::before { width: 300px; height: 300px; }
+
+  .btn-next {
+    color: var(--pastel-blue); border-color: rgba(126,184,218,0.3);
+  }
+  .btn-next::before { background: var(--pastel-blue); }
+  .btn-next:hover { border-color: var(--pastel-blue); box-shadow: 0 0 30px rgba(126,184,218,0.15); }
+
+  .btn-agents {
+    color: var(--pastel-red); border-color: rgba(232,160,160,0.3);
+  }
+  .btn-agents::before { background: var(--pastel-red); }
+  .btn-agents:hover { border-color: var(--pastel-red); box-shadow: 0 0 30px rgba(232,160,160,0.15); }
+
+  .btn-publish {
+    color: var(--pastel-green); border-color: rgba(160,217,149,0.3);
+  }
+  .btn-publish::before { background: var(--pastel-green); }
+  .btn-publish:hover { border-color: var(--pastel-green); box-shadow: 0 0 30px rgba(160,217,149,0.15); }
+
+  /* ══════════════════
+     STAGE 2: Contracts
+     ══════════════════ */
+  .contracts-area {
+    width: 100%; max-width: 1000px; margin: 0 auto;
+    display: none;
+    transition: all 0.7s ease;
+  }
+  .contracts-area.visible { display: block; }
+  .contracts-area.shrink-1 { transform: scale(0.8); transform-origin: top center; margin-bottom: -60px; }
+
+  .contracts-title {
+    font-size: 0.6rem; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 14px; text-align: center;
+    display: flex; align-items: center; gap: 12px; justify-content: center;
+  }
+  .ct-bar { width: 50px; height: 1px; background: rgba(184,160,232,0.2); }
+
+  .contracts-grid {
+    display: flex; gap: 10px;
+  }
+  .contract-card {
+    flex: 1; min-width: 0;
+    background: rgba(184,160,232,0.04); border: 1px solid rgba(184,160,232,0.1);
+    border-radius: 14px; padding: 14px 14px;
+    opacity: 0; transform: translateY(16px);
+    transition: all 0.5s cubic-bezier(0.4,0,0.2,1);
+  }
+  .contract-card.visible { opacity: 1; transform: translateY(0); }
+  .contract-card:hover { border-color: rgba(184,160,232,0.3); box-shadow: 0 0 25px rgba(184,160,232,0.08); }
+
+  .cc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .cc-shield {
+    width: 24px; height: 24px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; font-size: 0.75rem; flex-shrink: 0;
+  }
+  .cc-shield.security { background: rgba(184,160,232,0.15); }
+  .cc-shield.access { background: rgba(126,184,218,0.15); }
+  .cc-shield.privacy { background: rgba(232,160,191,0.15); }
+  .cc-shield.audit { background: rgba(232,196,160,0.15); }
+  .cc-shield.api { background: rgba(126,212,192,0.15); }
+  .cc-shield.export { background: rgba(232,223,160,0.15); }
+  .cc-shield.web { background: rgba(232,160,160,0.15); }
+  .cc-shield.retention { background: rgba(160,217,149,0.15); }
+  .cc-shield.webhook { background: rgba(232,196,160,0.15); }
+  .cc-shield.residency { background: rgba(184,160,232,0.15); }
+  .cc-shield.noext { background: rgba(232,160,160,0.15); }
+  .cc-shield.sync { background: rgba(126,184,218,0.15); }
+  .cc-shield.search { background: rgba(232,223,160,0.15); }
+  .cc-name { font-family: 'Sora', sans-serif; font-size: 0.62rem; font-weight: 600; color: var(--pastel-purple); white-space: nowrap; }
+  .cc-status {
+    margin-left: auto; display: flex; align-items: center; gap: 5px;
+    font-size: 0.46rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pastel-green);
+  }
+  .s-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pastel-green); animation: dotPulse 2s ease-in-out infinite; }
+  .cc-rules { display: flex; flex-wrap: wrap; gap: 4px; }
+  .cc-rule {
+    font-size: 0.48rem; padding: 2px 7px; border-radius: 20px;
+    background: rgba(184,160,232,0.06); border: 1px solid rgba(184,160,232,0.12);
+    color: var(--text); display: flex; align-items: center; gap: 5px;
+  }
+  .chk { color: var(--pastel-green); font-size: 0.6rem; }
+
+  /* Contract to catalogue SVG */
+  .contract-cat-svg {
+    width: 100%; max-width: 1000px; height: 70px; overflow: visible; flex-shrink: 0;
+  }
+  .cc-flow-line { stroke-width: 1.2; fill: none; stroke-dasharray: 5 3; }
+  .cc-flow-dot { opacity: 0.7; }
+
+  /* ══════════════════
+     STAGE 2.5: Governance Agents
+     ══════════════════ */
+  /* Note: agents-area ID is on agents-row-layout now */
+
+  .agents-title {
+    font-size: 0.6rem; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--pastel-red); margin-bottom: 14px; text-align: center;
+    display: flex; align-items: center; gap: 12px; justify-content: center;
+  }
+  .at-bar { width: 50px; height: 1px; background: rgba(232,160,160,0.3); }
+
+  .agents-grid {
+    display: flex; gap: 10px;
+  }
+  .agent-card {
+    flex: 1; min-width: 0;
+    background: rgba(232,160,160,0.04); border: 1px solid rgba(232,160,160,0.12);
+    border-radius: 14px; padding: 14px 10px;
+    opacity: 0; transform: translateY(16px);
+    transition: all 0.5s cubic-bezier(0.4,0,0.2,1);
+  }
+  .agent-card.visible { opacity: 1; transform: translateY(0); }
+  .agent-card:hover { border-color: rgba(232,160,160,0.35); box-shadow: 0 0 25px rgba(232,160,160,0.1); }
+
+  .ag-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .ag-icon {
+    width: 24px; height: 24px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; font-size: 0.75rem; flex-shrink: 0;
+    background: rgba(232,160,160,0.12);
+  }
+  .ag-name { font-family: 'Sora', sans-serif; font-size: 0.58rem; font-weight: 600; color: var(--pastel-red); white-space: nowrap; }
+  .ag-status {
+    margin-left: auto; display: flex; align-items: center; gap: 5px;
+    font-size: 0.44rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pastel-red);
+  }
+  .ag-status .s-dot { background: var(--pastel-red); }
+  .ag-outputs { display: flex; flex-wrap: wrap; gap: 4px; }
+  .ag-output {
+    font-size: 0.46rem; padding: 2px 7px; border-radius: 20px;
+    background: rgba(232,160,160,0.06); border: 1px solid rgba(232,160,160,0.12);
+    color: var(--text); display: flex; align-items: center; gap: 5px;
+  }
+  .ag-output .chk { color: var(--pastel-red); }
+
+  /* Agents area wrapper */
+  .agents-row-layout {
+    width: 100%; max-width: 1000px; margin: 0 auto;
+    display: none; flex-direction: column;
+    transition: all 0.7s ease;
+  }
+  .agents-row-layout.visible { display: flex; }
+  .agents-row-layout.shrink-1 { transform: scale(0.8); transform-origin: top center; margin-bottom: -60px; }
+
+  .agents-main { width: 100%; }
+
+  /* Automated Actions — horizontal row under agents */
+  .auto-actions-panel {
+    width: 100%; margin-top: 16px;
+    opacity: 0; transform: translateY(12px);
+    transition: all 0.6s cubic-bezier(0.4,0,0.2,1);
+  }
+  .auto-actions-panel.visible { opacity: 1; transform: translateY(0); }
+
+  .aap-title {
+    font-size: 0.58rem; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--pastel-red); margin-bottom: 10px; text-align: center;
+    display: flex; align-items: center; gap: 12px; justify-content: center;
+    font-family: 'Sora', sans-serif; font-weight: 600;
+  }
+  .aap-subtitle {
+    font-size: 0.46rem; color: var(--text-dim); margin-bottom: 12px; line-height: 1.5; text-align: center;
+  }
+  .aap-grid {
+    display: flex; gap: 10px;
+  }
+  .aap-action {
+    flex: 1; min-width: 0;
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 12px 12px;
+    background: rgba(232,160,160,0.03); border: 1px solid rgba(232,160,160,0.08);
+    border-radius: 12px;
+    opacity: 0; transform: translateY(10px);
+    transition: all 0.5s cubic-bezier(0.4,0,0.2,1);
+  }
+  .aap-action.visible { opacity: 1; transform: translateY(0); }
+  .aap-action:hover { border-color: rgba(232,160,160,0.25); }
+  .aap-action-icon {
+    width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0;
+    background: rgba(232,160,160,0.1);
+    display: flex; align-items: center; justify-content: center; font-size: 0.7rem;
+  }
+  .aap-action-name { font-family: 'Sora', sans-serif; font-size: 0.52rem; font-weight: 600; color: var(--text); }
+  .aap-action-desc { font-size: 0.44rem; color: var(--text-dim); line-height: 1.4; margin-top: 1px; }
+  .aap-action .aap-pulse {
+    display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--pastel-red); margin-left: 4px; vertical-align: middle;
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+
+  /* ── Continual Governance section ── */
+  .continual-gov {
+    width: 100%; max-width: 1000px; margin: 30px auto 0;
+    display: none; flex-direction: column; align-items: center;
+    padding-bottom: 20px;
+  }
+  .continual-gov.visible { display: flex; }
+
+  .cg-title {
+    font-size: 0.6rem; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--pastel-red); margin-bottom: 14px; text-align: center;
+    display: flex; align-items: center; gap: 12px; justify-content: center;
+  }
+  .cg-bar { width: 50px; height: 1px; background: rgba(232,160,160,0.3); }
+
+  .cg-content {
+    display: flex; gap: 16px; width: 100%; align-items: stretch;
+  }
+  .cg-cycle {
+    flex: 1; display: flex; flex-direction: column; gap: 8px;
+  }
+  .cg-card {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px;
+    background: rgba(232,160,160,0.03); border: 1px solid rgba(232,160,160,0.08);
+    border-radius: 12px;
+    opacity: 0; transform: translateY(12px);
+    transition: all 0.5s cubic-bezier(0.4,0,0.2,1);
+  }
+  .cg-card.visible { opacity: 1; transform: translateY(0); }
+  .cg-card:hover { border-color: rgba(232,160,160,0.25); }
+
+  .cg-card-icon {
+    width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+    background: rgba(232,160,160,0.08);
+    display: flex; align-items: center; justify-content: center; font-size: 0.9rem;
+  }
+  .cg-card-info { flex: 1; }
+  .cg-card-name { font-family: 'Sora', sans-serif; font-size: 0.6rem; font-weight: 600; color: var(--pastel-red); margin-bottom: 2px; }
+  .cg-card-desc { font-size: 0.48rem; color: var(--text-dim); line-height: 1.4; }
+
+  .cg-loop-svg { width: 60px; flex-shrink: 0; align-self: center; overflow: visible; }
+
+  /* Agent flow connector SVGs */
+  .agent-flow-svg {
+    width: 100%; max-width: 1000px; height: 70px; overflow: visible; flex-shrink: 0;
+  }
+  .af-line { stroke-width: 1.2; fill: none; stroke-dasharray: 5 3; }
+  .af-dot { opacity: 0.7; }
+
+  /* ══════════════════
+     STAGE 4: Published
+     ══════════════════ */
+  .published-area {
+    width: 100%;
+    display: none; flex-direction: column; align-items: center;
+    margin-top: 10px; padding-bottom: 50px;
+  }
+  .published-area.visible { display: flex; }
+
+  /* Big catalogue circle */
+  .cat-wrap { position: relative; margin-bottom: 20px; }
+  .cat-glow {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: 220px; height: 220px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(126,184,218,0.12) 0%, transparent 70%);
+    animation: glowP 3s ease-in-out infinite; pointer-events: none;
+  }
+  @keyframes glowP { 0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 0.5; } 50% { transform: translate(-50%,-50%) scale(1.3); opacity: 1; } }
+
+  .cat-circle {
+    width: 180px; height: 180px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 40%, rgba(126,184,218,0.12) 0%, transparent 70%);
+    border: 2px solid rgba(126,184,218,0.25);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    position: relative;
+    opacity: 0; transform: scale(0.3);
+    transition: all 0.8s cubic-bezier(0.2,0.8,0.2,1.2);
+  }
+  .cat-circle.visible { opacity: 1; transform: scale(1); }
+  .cat-circle .cc-icon { font-size: 3.2rem; filter: drop-shadow(0 0 15px rgba(126,184,218,0.4)); }
+  .cat-circle .cc-lbl { font-size: 0.5rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--pastel-blue); opacity: 0.7; margin-top: 2px; }
+
+  .cat-orbit {
+    position: absolute; border-radius: 50%;
+    border: 1px solid rgba(126,184,218,0.08);
+    top: 50%; left: 50%;
+  }
+  .cat-orbit-1 { width: 230px; height: 230px; margin-left: -115px; margin-top: -115px; animation: orbSpin 25s linear infinite; }
+  .cat-orbit-2 { width: 280px; height: 280px; margin-left: -140px; margin-top: -140px; animation: orbSpin 40s linear infinite reverse; border-style: dashed; border-color: rgba(184,160,232,0.06); }
+  @keyframes orbSpin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
+  /* Orbit dots */
+  .orb-dot {
+    position: absolute; width: 6px; height: 6px; border-radius: 50%;
+  }
+
+  .pub-label {
+    font-size: 0.6rem; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--pastel-green); margin-bottom: 16px;
+    opacity: 0; transition: all 0.6s;
+  }
+  .pub-label.visible { opacity: 1; }
+  .pub-label span { animation: pubG 2s ease-in-out infinite; }
+  @keyframes pubG { 0%,100% { text-shadow: 0 0 8px rgba(160,217,149,0.2); } 50% { text-shadow: 0 0 25px rgba(160,217,149,0.6); } }
+
+  /* Download SVG */
+  .dl-svg { width: 100%; max-width: 600px; height: 55px; overflow: visible; }
+  .dl-line { stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; }
+  .dl-dot { opacity: 0.7; }
+
+  .users-row { display: flex; gap: 14px; justify-content: center; }
+  .user-card {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 12px 16px 10px;
+    background: var(--bg-light); border: 1px solid var(--border); border-radius: 14px;
+    min-width: 82px;
+    opacity: 0; transform: translateY(18px);
+    transition: all 0.6s cubic-bezier(0.4,0,0.2,1);
+  }
+  .user-card.visible { opacity: 1; transform: translateY(0); }
+  .user-card:hover { border-color: rgba(255,255,255,0.1); transform: translateY(-3px); }
+
+  .uc-avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 700; position: relative;
+  }
+  .uc-ring {
+    position: absolute; width: 100%; height: 100%; border-radius: 50%;
+    border: 1.5px solid; animation: ucRing 2.5s ease-in-out infinite; opacity: 0;
+  }
+  @keyframes ucRing { 0% { transform: scale(1); opacity: 0.5; } 100% { transform: scale(1.7); opacity: 0; } }
+  .uc-name { font-size: 0.58rem; color: var(--text); font-weight: 500; }
+  .uc-dept { font-size: 0.46rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+  .uc-using { display: flex; align-items: center; gap: 4px; font-size: 0.46rem; color: var(--pastel-green); margin-top: 1px; }
+  .uc-using .ud { width: 5px; height: 5px; border-radius: 50%; background: var(--pastel-green); animation: dotPulse 2s ease-in-out infinite; }
+</style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+
+<div class="ida-intro" id="idaIntro">
+  <div class="ida-intro-title">IDA</div>
+  <div class="ida-intro-text">
+    An orchestration, availability, and governance framework that enables enterprise users to build their own applications, bind them to enforceable contracts, pass them through governance agents, and publish to a catalogue for all users.
+  </div>
+  <div class="ida-intro-pillars">
+    <span class="ida-pillar orch">Orchestration</span>
+    <span class="ida-pillar avail">Availability</span>
+    <span class="ida-pillar gov">Governance</span>
+  </div>
+</div>
+
+<button class="back-btn" id="backBtn">&larr; Back</button>
+<div class="steps"><div class="step-dot active" data-s="0"></div><div class="step-dot" data-s="1"></div><div class="step-dot" data-s="2"></div><div class="step-dot" data-s="3"></div><div class="step-dot" data-s="4"></div></div>
+
+<div class="scene" id="scene">
+  <div class="scene-inner" id="sceneInner">
+
+    <!-- STAGE 0: Picker -->
+    <div class="stage-picker" id="stagePicker">
+      <div class="user-block">
+        <div class="user-avatar">AM</div>
+        <div><div class="user-name">Alex Morgan</div><div class="user-role">App Developer &middot; Engineering</div></div>
+      </div>
+      <div class="picker-grid" id="pickerGrid"></div>
+      <div class="picker-hint">SELECT AN APP TO BUILD</div>
+    </div>
+
+    <!-- STAGE 1: App + Data Sources (left/right) -->
+    <div class="stage-row" id="stageRow1">
+      <div class="row-content" id="rowContent1">
+        <div class="app-panel" id="appPanel"></div>
+        <svg class="conn-svg-lr" id="connLR"></svg>
+        <div class="ds-panel" id="dsPanel">
+          <div class="ds-panel-title">Data Sources &amp; Access <span class="dt-bar"></span></div>
+          <div id="dsCards"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Next Stage button -->
+    <div class="stage-btn-wrap" id="btnNextWrap">
+      <button class="stage-btn btn-next" id="btnNext">Next Stage &rarr;</button>
+    </div>
+
+    <!-- Flow: Data Sources → Contracts -->
+    <div class="flow-connector" id="flowDStoContracts">
+      <svg class="flow-conn-svg" id="fcSvg1"></svg>
+    </div>
+
+    <!-- STAGE 2: Contracts -->
+    <div class="contracts-area" id="contractsArea">
+      <div class="contracts-title"><span class="ct-bar"></span>Contracts Required to Publish<span class="ct-bar"></span></div>
+      <div class="contracts-grid" id="contractsGrid"></div>
+    </div>
+
+    <!-- Agents Review button -->
+    <div class="stage-btn-wrap" id="btnAgentsWrap">
+      <button class="stage-btn btn-agents" id="btnAgents">Governance Review &rarr;</button>
+    </div>
+
+    <!-- Flow: Contracts → Agents -->
+    <div class="flow-connector" id="flowContractsToAgents" style="padding:20px 0">
+      <svg class="flow-conn-svg" id="fcSvgCA" style="height:80px"></svg>
+    </div>
+
+    <!-- STAGE 3: Governance Agents + Automated Actions -->
+    <div class="agents-row-layout" id="agentsArea">
+      <div class="agents-main">
+        <div class="agents-title"><span class="at-bar"></span>Governance Agents<span class="at-bar"></span></div>
+        <div class="agents-grid" id="agentsGrid"></div>
+      </div>
+      <div class="auto-actions-panel" id="autoActionsPanel">
+        <div class="aap-title"><span class="at-bar"></span>Automated Actions<span class="at-bar"></span></div>
+        <div class="aap-subtitle">Triggered by agent learning and continuous analysis</div>
+        <div class="aap-grid" id="autoActionsList"></div>
+      </div>
+    </div>
+
+    <!-- Publish button -->
+    <div class="stage-btn-wrap" id="btnPubWrap">
+      <button class="stage-btn btn-publish" id="btnPublish">Publish to Catalogue &rarr;</button>
+    </div>
+
+    <!-- STAGE 4: Published -->
+    <div class="published-area" id="publishedArea">
+      <svg class="contract-cat-svg" id="contractCatSvg"></svg>
+      <div class="cat-wrap">
+        <div class="cat-glow"></div>
+        <div class="cat-circle" id="catCircle">
+          <div class="cat-orbit cat-orbit-1"></div>
+          <div class="cat-orbit cat-orbit-2"></div>
+          <span class="cc-icon" id="ccIcon"></span>
+          <span class="cc-lbl">Catalogue</span>
+        </div>
+      </div>
+      <div class="pub-label" id="pubLabel"><span>AVAILABLE TO ALL USERS</span></div>
+      <svg class="dl-svg" id="dlSvg"></svg>
+      <div class="users-row" id="usersRow"></div>
+    </div>
+
+    <!-- Continual Governance -->
+    <div class="continual-gov" id="continualGov">
+      <div class="cg-title"><span class="cg-bar"></span>Continual Governance<span class="cg-bar"></span></div>
+      <div class="cg-content">
+        <div class="cg-cycle" id="cgCycle"></div>
+        <svg class="cg-loop-svg" id="cgLoopSvg" viewBox="0 0 60 200">
+          <path d="M 30 0 C 50 50, 50 150, 30 200" stroke="rgba(232,160,160,0.2)" stroke-width="1.2" fill="none" stroke-dasharray="5 3"/>
+          <path d="M 30 200 C 10 150, 10 50, 30 0" stroke="rgba(232,160,160,0.2)" stroke-width="1.2" fill="none" stroke-dasharray="5 3"/>
+          <circle r="3" fill="#e8a0a0" opacity="0.7">
+            <animateMotion dur="4s" repeatCount="indefinite" path="M 30 0 C 50 50, 50 150, 30 200 C 10 150, 10 50, 30 0"/>
+          </circle>
+        </svg>
+        <div class="cg-cycle" id="cgEvolve"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="tagline"><span class="t1">Build it.</span>&nbsp;&nbsp;<span class="t2">Contract it.</span>&nbsp;&nbsp;<span class="t3" style="color:var(--pastel-red)">Govern it.</span>&nbsp;&nbsp;<span class="t3">Publish it.</span></div>
+
+<script>
+// ── Particles ──
+const canvas = document.getElementById('bg-canvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+resizeCanvas(); window.addEventListener('resize', resizeCanvas);
+
+class Particle {
+  constructor() { this.reset(); }
+  reset() {
+    this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height;
+    this.size = Math.random() * 1.5 + 0.3;
+    this.speedX = (Math.random() - 0.5) * 0.25; this.speedY = (Math.random() - 0.5) * 0.25;
+    this.opacity = Math.random() * 0.25 + 0.05; this.pulse = Math.random() * Math.PI * 2;
+  }
+  update() { this.x += this.speedX; this.y += this.speedY; this.pulse += 0.015; if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) this.reset(); }
+  draw() { const o = this.opacity * (0.5 + 0.5 * Math.sin(this.pulse)); ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fillStyle = `rgba(126,184,218,${o})`; ctx.fill(); }
+}
+for (let i = 0; i < 70; i++) particles.push(new Particle());
+function animBg() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  particles.forEach(p => { p.update(); p.draw(); });
+  for (let i = 0; i < particles.length; i++) for (let j = i+1; j < particles.length; j++) {
+    const dx = particles[i].x-particles[j].x, dy = particles[i].y-particles[j].y, dist = Math.sqrt(dx*dx+dy*dy);
+    if (dist < 110) { ctx.beginPath(); ctx.moveTo(particles[i].x, particles[i].y); ctx.lineTo(particles[j].x, particles[j].y); ctx.strokeStyle = `rgba(126,184,218,${0.025*(1-dist/110)})`; ctx.lineWidth = 0.5; ctx.stroke(); }
+  }
+  requestAnimationFrame(animBg);
+}
+animBg();
+
+// ── Data ──
+const appColors = ['#7eb8da','#e8a0bf','#a0d995','#b8a0e8','#e8c4a0','#7ed4c0','#e8dfa0','#e8a0a0'];
+const apps = [
+  { icon:'',title:'Project Status Reporter',color:appColors[0],dev:'Alex Morgan',team:'Engineering',
+    desc:'Generates PowerPoint status presentations from live project data, pulling last month\'s deck as template.',
+    ds:[{icon:'',name:'Jira / Project Mgmt',desc:'Sprint data, velocity, milestones',access:'read-only',sys:'Atlassian Jira',sysType:'SaaS'},
+        {icon:'',name:'Previous Presentations',desc:'Last month deck as template',access:'read-only',sys:'SharePoint',sysType:'Document Store'},
+        {icon:'',name:'Timesheet System',desc:'Hours logged, resource allocation',access:'read-only',sys:'Workday',sysType:'HR Platform'},
+        {icon:'',name:'Risk Register',desc:'Active risks, RAG status',access:'read-only',sys:'Internal DB',sysType:'Database'}],
+    contracts:[
+      {name:'Security',type:'security',rules:['TLS in transit','No client-side cache','Session timeout 15m','Signed API tokens']},
+      {name:'Access Control',type:'access',rules:['Own projects only','No cross-team data','Role-based perms','Manager dept override']},
+      {name:'Integration API',type:'api',rules:['Jira REST API v3','SharePoint Graph API','OAuth2 service tokens','Rate limit 100 req/min']},
+      {name:'Data Export',type:'export',rules:['PPTX format only','No raw data in export','Watermarked output','Max 50 slides per deck']}
+    ]},
+  { icon:'',title:'HR Onboarding Portal',color:appColors[1],dev:'Sam Chen',team:'HR Technology',
+    desc:'Self-service onboarding checklist for new starters. Tracks IT provisioning, training, document submission.',
+    ds:[{icon:'',name:'HR Information System',desc:'Employee record, start date',access:'read-only',sys:'Workday',sysType:'HR Platform'},
+        {icon:'',name:'IT Provisioning',desc:'Laptop, accounts, access cards',access:'read-write',sys:'ServiceNow',sysType:'ITSM'},
+        {icon:'',name:'Training Platform',desc:'Mandatory modules, completion',access:'read-only',sys:'Cornerstone',sysType:'LMS'},
+        {icon:'',name:'Document Mgmt',desc:'Contracts, ID, tax forms',access:'read-only',sys:'SharePoint',sysType:'Document Store'}],
+    contracts:[
+      {name:'Security',type:'security',rules:['AES-256 at rest','MFA required','Geo-restricted','No external sharing']},
+      {name:'Data Privacy',type:'privacy',rules:['Own record only','PII masked in logs','No bulk export','GDPR Art.15 compliant']},
+      {name:'Integration API',type:'api',rules:['ServiceNow write API','Workday read-only API','Scoped OAuth tokens','Retry with backoff']},
+      {name:'External Web Access',type:'web',rules:['Cornerstone LMS domain only','TLS 1.3 required','No open internet','Allowlisted endpoints']}
+    ]},
+  { icon:'',title:'Budget Tracker',color:appColors[2],dev:'Jordan Hayes',team:'Finance',
+    desc:'Live budget-vs-actuals dashboard for department heads with spend categories, forecasts, and variances.',
+    ds:[{icon:'',name:'ERP System',desc:'GL codes, cost centres, actuals',access:'read-only',sys:'SAP S/4HANA',sysType:'ERP'},
+        {icon:'',name:'Procurement',desc:'Purchase orders, invoices',access:'read-only',sys:'Coupa',sysType:'Procurement'},
+        {icon:'',name:'Payroll Aggregates',desc:'Dept headcount costs',access:'read-only',sys:'Workday',sysType:'HR Platform'},
+        {icon:'',name:'Forecast Models',desc:'Monthly projections',access:'read-write',sys:'Anaplan',sysType:'Planning'}],
+    contracts:[
+      {name:'Security',type:'security',rules:['Read-only default','Encrypted channels','IP whitelisting','No data download']},
+      {name:'Access Control',type:'access',rules:['Dept-scoped only','No individual salary','CFO org override','Approval chain for write']},
+      {name:'Audit & Compliance',type:'audit',rules:['Full audit log','Tamper-proof records','SOX compliance','7-year retention']},
+      {name:'Integration API',type:'api',rules:['SAP OData read-only','Coupa REST API','Anaplan bulk API (write)','Mutual TLS auth']}
+    ]},
+  { icon:'',title:'Feedback Aggregator',color:appColors[3],dev:'Riley Park',team:'Marketing',
+    desc:'Unified NPS scores, survey responses, and support ticket sentiment with auto-categorised themes.',
+    ds:[{icon:'',name:'CRM System',desc:'Customer interactions, segments',access:'read-only',sys:'Salesforce',sysType:'CRM'},
+        {icon:'',name:'Survey Platform',desc:'NPS, CSAT, free-text',access:'read-only',sys:'Qualtrics',sysType:'Survey'},
+        {icon:'',name:'Helpdesk Tickets',desc:'Tickets, resolution times',access:'read-only',sys:'Zendesk',sysType:'Support'}],
+    contracts:[
+      {name:'Security',type:'security',rules:['Read-only enforced','Rate-limited APIs','No raw export','Token-based auth']},
+      {name:'Data Privacy',type:'privacy',rules:['Anonymised default','No PII in dashboards','Consent-based only','Auto-redact names']},
+      {name:'External Web Access',type:'web',rules:['Qualtrics API endpoint','Zendesk API endpoint','Salesforce sandbox first','Egress firewall rules']},
+      {name:'Data Retention',type:'retention',rules:['90-day survey data','30-day ticket cache','No long-term PII store','Auto-purge on schedule']}
+    ]},
+  { icon:'',title:'Incident Response',color:appColors[4],dev:'Morgan Lee',team:'IT Operations',
+    desc:'Real-time incident tracker with severity classification and escalation workflows.',
+    ds:[{icon:'',name:'Monitoring Stack',desc:'Alerts, metrics, uptime',access:'read-only',sys:'Datadog',sysType:'Observability'},
+        {icon:'',name:'Ticketing System',desc:'Incidents, SLA timers',access:'read-write',sys:'ServiceNow',sysType:'ITSM'},
+        {icon:'',name:'On-Call Rotas',desc:'Escalation paths',access:'read-only',sys:'PagerDuty',sysType:'On-Call'}],
+    contracts:[
+      {name:'Security',type:'security',rules:['Write: tickets only','Read: monitoring','Service account auth','Credential rotation 90d']},
+      {name:'Access Control',type:'access',rules:['On-call tier access','Escalation enforced','P1 visible to all','P3+ team-scoped']},
+      {name:'Webhook Contract',type:'webhook',rules:['Inbound from Datadog','Outbound to PagerDuty','HMAC signature verify','Payload size max 1MB']},
+      {name:'External Web Access',type:'web',rules:['Datadog API domain','PagerDuty API domain','No other egress','VPN tunnel required']}
+    ]},
+  { icon:'',title:'Compliance Scanner',color:appColors[5],dev:'Casey Quinn',team:'Legal',
+    desc:'Scans documents against GDPR, SOX, ISO 27001 and flags non-compliance.',
+    ds:[{icon:'',name:'Document Mgmt',desc:'Policies, contracts, evidence',access:'read-only',sys:'SharePoint',sysType:'Document Store'},
+        {icon:'',name:'Regulatory Database',desc:'Requirements, mappings',access:'read-only',sys:'Internal DB',sysType:'Database'},
+        {icon:'',name:'Audit Findings',desc:'Non-conformities, status',access:'read-only',sys:'Archer GRC',sysType:'GRC'}],
+    contracts:[
+      {name:'Security',type:'security',rules:['No data leaves org','Encrypted at rest','Air-gapped processing','No third-party APIs']},
+      {name:'Audit & Compliance',type:'audit',rules:['Full audit trail','Regulatory mapped','Evidence chain intact','Immutable results']},
+      {name:'Data Residency',type:'residency',rules:['UK data centres only','No cloud replication','On-prem processing','No cross-border transfer']},
+      {name:'No External Access',type:'noext',rules:['Zero internet access','Internal DNS only','Blocked egress firewall','Offline rule updates']}
+    ]},
+  { icon:'',title:'Resource Booking',color:appColors[6],dev:'Taylor Webb',team:'Facilities',
+    desc:'Book meeting rooms, desks, equipment with calendar integration and capacity enforcement.',
+    ds:[{icon:'',name:'Calendar Systems',desc:'Availability, bookings',access:'read-write',sys:'Microsoft 365',sysType:'Productivity'},
+        {icon:'',name:'Asset Register',desc:'Equipment, location',access:'read-only',sys:'Asset Panda',sysType:'Asset Mgmt'},
+        {icon:'',name:'Floor Plans',desc:'Layouts, zones, capacity',access:'read-only',sys:'Internal DB',sysType:'Database'}],
+    contracts:[
+      {name:'Security',type:'security',rules:['Identity-aware booking','Conflict prevention','Anti-hoarding','Auto-release no-shows']},
+      {name:'Access Control',type:'access',rules:['Location-based access','Capacity enforcement','Visitor pre-approval','Building-scoped']},
+      {name:'Integration API',type:'api',rules:['MS Graph Calendar API','Real-time sync required','Delta query for changes','Webhook subscriptions']},
+      {name:'Real-time Sync',type:'sync',rules:['Max 30s sync delay','Bi-directional calendar','Conflict auto-resolve','Offline queue fallback']}
+    ]},
+  { icon:'',title:'Knowledge Base',color:appColors[7],dev:'Jamie Ross',team:'Content Ops',
+    desc:'Searchable team wiki aggregating content from multiple sources with information classification.',
+    ds:[{icon:'',name:'SharePoint / Confluence',desc:'Wiki pages, libraries',access:'read-only',sys:'Confluence',sysType:'Wiki'},
+        {icon:'',name:'Internal Repos',desc:'READMEs, architecture docs',access:'read-only',sys:'GitHub Enterprise',sysType:'Source Control'},
+        {icon:'',name:'Chat Archives',desc:'Resolved Q&A, decisions',access:'read-only',sys:'Slack Enterprise',sysType:'Messaging'}],
+    contracts:[
+      {name:'Security',type:'security',rules:['Classification indexing','No classified in search','Encrypted index','Source attribution']},
+      {name:'Data Privacy',type:'privacy',rules:['Dept-scoped search','No cross-team leak','Redact personal chats','Opt-out respected']},
+      {name:'Integration API',type:'api',rules:['Confluence REST API','GitHub API v4','Slack Web API','Read-only scopes only']},
+      {name:'Search & Indexing',type:'search',rules:['Internal index only','No external crawling','Incremental re-index','Classified content excluded']}
+    ]}
+];
+
+const agents = [
+  { icon:'🔧', name:'ITSM Integration', outputs:['Change requests','Version control','Release tickets','CI/CD gates'] },
+  { icon:'📦', name:'Dependency Mgmt', outputs:['Upgrade schedules','Vulnerability alerts','Compatibility reports','License checks'] },
+  { icon:'🏛️', name:'Operating Model', outputs:['Standards compliance','Architecture review','Naming conventions','Pattern enforcement'] },
+  { icon:'📝', name:'Docs & Publishing', outputs:['Auto-generated docs','API specifications','Catalogue listing','Release notes'] },
+  { icon:'📊', name:'Monitoring', outputs:['Health dashboards','SLA tracking','Performance alerts','Uptime reports'] },
+  { icon:'🔒', name:'Security Scanning', outputs:['Vulnerability scans','Pen test reports','OWASP compliance','Code analysis'] },
+];
+
+const autoActions = [
+  { icon:'🔄', name:'Auto-Upgrade', desc:'Dependency updates applied when agents detect safe upgrade paths' },
+  { icon:'🚨', name:'Incident Response', desc:'Monitoring agent triggers alerts and auto-scales on anomalies' },
+  { icon:'📋', name:'Contract Tightening', desc:'Security agent evolves contract rules based on threat patterns' },
+  { icon:'🔁', name:'Re-certification', desc:'Periodic automated re-validation of all published apps' },
+  { icon:'📖', name:'Doc Refresh', desc:'Documentation agent regenerates docs when APIs change' },
+];
+
+const continualCycle = [
+  { icon:'👁️', name:'Observe', desc:'Agents continuously monitor app behaviour, data flows, and usage patterns' },
+  { icon:'🧠', name:'Analyse', desc:'Pattern recognition across the portfolio detects drift, risk, and opportunity' },
+  { icon:'⚡', name:'Act', desc:'Automated actions fire when thresholds are breached or improvements identified' },
+];
+
+const continualEvolve = [
+  { icon:'📈', name:'Learn', desc:'Agents build knowledge from every action, refining detection models over time' },
+  { icon:'🔄', name:'Evolve', desc:'Contract rules, thresholds, and policies auto-adapt to emerging patterns' },
+  { icon:'🛡️', name:'Strengthen', desc:'Each cycle tightens governance — the platform gets smarter with every app' },
+];
+
+const consumers = [
+  {name:'Sarah J.',dept:'Sales',color:'#e8a0bf',ini:'SJ'},
+  {name:'Dev P.',dept:'Engineering',color:'#7eb8da',ini:'DP'},
+  {name:'Maria L.',dept:'Finance',color:'#a0d995',ini:'ML'},
+  {name:'Chris T.',dept:'Marketing',color:'#e8c4a0',ini:'CT'},
+  {name:'Kim W.',dept:'Operations',color:'#7ed4c0',ini:'KW'},
+];
+
+// ── State ──
+let step = 0, sel = null;
+const scene = document.getElementById('scene');
+
+function updateUI() {
+  document.querySelectorAll('.step-dot').forEach((d,i) => { d.classList.remove('active','done'); if(i===step) d.classList.add('active'); else if(i<step) d.classList.add('done'); });
+  document.getElementById('backBtn').classList.toggle('visible', step > 0);
+}
+
+// ── Build picker ──
+const pg = document.getElementById('pickerGrid');
+apps.forEach((a,i) => {
+  const d = document.createElement('div'); d.className = 'pick-card';
+  d.innerHTML = `<span class="p-icon">${a.icon}</span><span class="p-label">${a.title}</span>`;
+  d.addEventListener('click', () => goStep1(i));
+  pg.appendChild(d);
+});
+
+// ── Step 0 → 1 ──
+function goStep1(idx) {
+  sel = apps[idx]; step = 1; updateUI();
+  document.getElementById('stagePicker').classList.add('hidden');
+  document.getElementById('idaIntro').style.display = 'none';
+
+  const sr = document.getElementById('stageRow1');
+  sr.classList.add('visible'); sr.classList.remove('shrink-1','shrink-2');
+
+  // App panel
+  document.getElementById('appPanel').innerHTML = `
+    <div class="app-big-card" style="border-color:${sel.color}33">
+      <span class="abc-icon">${sel.icon}</span>
+      <div class="abc-title" style="color:${sel.color}">${sel.title}</div>
+      <div class="abc-desc">${sel.desc}</div>
+      <div class="abc-dev"><span class="dev-dot"></span>Built by <strong style="margin:0 3px">${sel.dev}</strong> &middot; ${sel.team}</div>
+    </div>
+  `;
+
+  // DS cards
+  const dsCards = document.getElementById('dsCards');
+  dsCards.innerHTML = '';
+  sel.ds.forEach((ds, i) => {
+    const c = document.createElement('div'); c.className = 'ds-card'; c.id = 'dsc' + i;
+    c.innerHTML = `
+      <div class="ds-card-icon">${ds.icon}<div class="rp"></div><div class="rp"></div></div>
+      <div class="ds-card-info"><div class="ds-card-name">${ds.name}</div><div class="ds-card-sys">${ds.sys} &middot; ${ds.sysType}</div></div>
+      <span class="ds-card-access ${ds.access}">${ds.access === 'read-only' ? 'READ' : 'READ / WRITE'}</span>
+    `;
+    dsCards.appendChild(c);
+    setTimeout(() => c.classList.add('visible'), 200 + i * 100);
+  });
+
+  // Draw connection lines after layout settles
+  setTimeout(drawLRConnections, 500);
+
+  document.getElementById('btnNextWrap').classList.add('visible');
+
+  // Reset later stages
+  document.getElementById('flowDStoContracts').classList.remove('visible');
+  document.getElementById('contractsArea').classList.remove('visible','shrink-1');
+  document.getElementById('btnAgentsWrap').classList.remove('visible');
+  document.getElementById('flowContractsToAgents').classList.remove('visible');
+  document.getElementById('agentsArea').classList.remove('visible','shrink-1');
+  document.getElementById('autoActionsPanel').classList.remove('visible');
+  document.getElementById('btnPubWrap').classList.remove('visible');
+  document.getElementById('publishedArea').classList.remove('visible');
+  document.getElementById('continualGov').classList.remove('visible');
+
+  setTimeout(() => scene.scrollTo({ top: 0, behavior: 'smooth' }), 50);
+}
+
+function drawLRConnections() {
+  const svg = document.getElementById('connLR');
+  const container = document.getElementById('rowContent1');
+  const cr = container.getBoundingClientRect();
+  svg.setAttribute('viewBox', `0 0 ${cr.width} ${cr.height}`);
+  svg.innerHTML = '';
+
+  const appCard = container.querySelector('.app-big-card');
+  if (!appCard) return;
+  const acr = appCard.getBoundingClientRect();
+  const fromX = acr.right - cr.left;
+  const fromY = acr.top + acr.height / 2 - cr.top;
+
+  const dsCards = container.querySelectorAll('.ds-card');
+  dsCards.forEach((dc, i) => {
+    const dcr = dc.getBoundingClientRect();
+    const toX = dcr.left - cr.left;
+    const toY = dcr.top + dcr.height / 2 - cr.top;
+    const midX = fromX + (toX - fromX) * 0.5;
+    const d = `M ${fromX} ${fromY} C ${midX} ${fromY}, ${midX} ${toY}, ${toX} ${toY}`;
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d); path.classList.add('conn-lr-line');
+    svg.appendChild(path);
+
+    // Animate line appearing
+    setTimeout(() => path.classList.add('active'), 300 + i * 100);
+
+    // Single pulse dot travelling along line
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('r', '3'); dot.classList.add('conn-lr-dot');
+    const am = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
+    am.setAttribute('dur', '3s'); am.setAttribute('repeatCount', 'indefinite');
+    am.setAttribute('begin', (i * 0.5) + 's'); am.setAttribute('path', d);
+    dot.appendChild(am); svg.appendChild(dot);
+  });
+}
+
+// ── Step 1 → 2 ──
+document.getElementById('btnNext').addEventListener('click', () => {
+  if (step !== 1) return;
+  step = 2; updateUI();
+
+  document.getElementById('stageRow1').classList.add('shrink-1');
+  document.getElementById('btnNextWrap').classList.remove('visible');
+
+  // Show flow connector: data sources → contracts
+  const fc1 = document.getElementById('flowDStoContracts');
+  fc1.classList.add('visible');
+  setTimeout(() => drawFlowSvg(document.getElementById('fcSvg1'), sel.contracts.length, 'rgba(184,160,232,0.2)', '#b8a0e8'), 200);
+
+  const ca = document.getElementById('contractsArea');
+  ca.classList.add('visible'); ca.classList.remove('shrink-1');
+
+  const cg = document.getElementById('contractsGrid');
+  cg.innerHTML = '';
+  sel.contracts.forEach((c, i) => {
+    const card = document.createElement('div'); card.className = 'contract-card';
+    card.innerHTML = `
+      <div class="cc-header">
+        <div class="cc-shield ${c.type}">${({security:'',access:'',privacy:'',audit:'',api:'',export:'',web:'',retention:'',webhook:'',residency:'',noext:'',sync:'',search:''})[c.type]||''}</div>
+        <div class="cc-name">${c.name}</div>
+        <div class="cc-status"><span class="s-dot"></span>ENFORCED</div>
+      </div>
+      <div class="cc-rules">${c.rules.map(r => `<span class="cc-rule"><span class="chk">&#10003;</span>${r}</span>`).join('')}</div>
+    `;
+    cg.appendChild(card);
+    setTimeout(() => card.classList.add('visible'), 300 + i * 150);
+  });
+
+  document.getElementById('btnAgentsWrap').classList.add('visible');
+
+  setTimeout(() => scene.scrollTo({ top: scene.scrollHeight, behavior: 'smooth' }), 200);
+});
+
+// ── Helper: draw vertical flow connector SVG ──
+function drawFlowSvg(svgEl, count, color, dotColor) {
+  const sr = svgEl.getBoundingClientRect();
+  const w = sr.width, h = sr.height;
+  svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svgEl.innerHTML = '';
+  const spread = Math.min(count * 50, w * 0.6);
+  const startX = w / 2;
+  for (let i = 0; i < count; i++) {
+    const toX = w / 2 + (i - (count - 1) / 2) * (spread / Math.max(count - 1, 1));
+    const d = `M ${startX} 0 C ${startX} ${h * 0.55}, ${toX} ${h * 0.45}, ${toX} ${h}`;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.style.stroke = color; path.style.strokeWidth = '1.2'; path.style.fill = 'none'; path.style.strokeDasharray = '5 3';
+    svgEl.appendChild(path);
+    {
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('r', '2.5'); dot.style.fill = dotColor; dot.style.opacity = '0.6';
+      const am = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
+      am.setAttribute('dur', '3s'); am.setAttribute('repeatCount', 'indefinite');
+      am.setAttribute('begin', (i * 0.5) + 's'); am.setAttribute('path', d);
+      dot.appendChild(am); svgEl.appendChild(dot);
+    }
+  }
+}
+
+// ── Step 2 → 3 (Governance Agents) ──
+document.getElementById('btnAgents').addEventListener('click', () => {
+  if (step !== 2) return;
+  step = 3; updateUI();
+
+  document.getElementById('contractsArea').classList.add('shrink-1');
+  document.getElementById('btnAgentsWrap').classList.remove('visible');
+
+  // Show flow connector: contracts → agents
+  const fcCA = document.getElementById('flowContractsToAgents');
+  fcCA.classList.add('visible');
+  setTimeout(() => drawFlowSvg(document.getElementById('fcSvgCA'), agents.length, 'rgba(232,160,160,0.2)', '#e8a0a0'), 200);
+
+  const aa = document.getElementById('agentsArea');
+  aa.classList.add('visible'); aa.classList.remove('shrink-1');
+
+  const ag = document.getElementById('agentsGrid');
+  ag.innerHTML = '';
+  agents.forEach((a, i) => {
+    const card = document.createElement('div'); card.className = 'agent-card';
+    card.innerHTML = `
+      <div class="ag-header">
+        <div class="ag-icon">${a.icon}</div>
+        <div class="ag-name">${a.name}</div>
+        <div class="ag-status"><span class="s-dot"></span>ACTIVE</div>
+      </div>
+      <div class="ag-outputs">${a.outputs.map(o => `<span class="ag-output"><span class="chk">&#10003;</span>${o}</span>`).join('')}</div>
+    `;
+    ag.appendChild(card);
+    setTimeout(() => card.classList.add('visible'), 300 + i * 120);
+  });
+
+  // Render automated actions panel
+  const aaList = document.getElementById('autoActionsList');
+  aaList.innerHTML = '';
+  autoActions.forEach((a, i) => {
+    const div = document.createElement('div'); div.className = 'aap-action';
+    div.innerHTML = `
+      <div class="aap-action-icon">${a.icon}</div>
+      <div><div class="aap-action-name">${a.name}<span class="aap-pulse"></span></div><div class="aap-action-desc">${a.desc}</div></div>
+    `;
+    aaList.appendChild(div);
+    setTimeout(() => div.classList.add('visible'), 700 + i * 120);
+  });
+  setTimeout(() => document.getElementById('autoActionsPanel').classList.add('visible'), 600);
+
+  document.getElementById('btnPubWrap').classList.add('visible');
+
+  setTimeout(() => scene.scrollTo({ top: scene.scrollHeight, behavior: 'smooth' }), 200);
+});
+
+// ── Step 3 → 4 (Publish) ──
+document.getElementById('btnPublish').addEventListener('click', () => {
+  if (step !== 3) return;
+  step = 4; updateUI();
+
+  document.getElementById('stageRow1').classList.add('shrink-2');
+  document.getElementById('agentsArea').classList.add('shrink-1');
+  document.getElementById('btnPubWrap').classList.remove('visible');
+
+  const pa = document.getElementById('publishedArea');
+  pa.classList.add('visible');
+
+  // Draw lines from contract cards to catalogue
+  setTimeout(() => {
+    const ccSvg = document.getElementById('contractCatSvg');
+    const sr = ccSvg.getBoundingClientRect();
+    ccSvg.setAttribute('viewBox', `0 0 ${sr.width} ${sr.height}`);
+    ccSvg.innerHTML = '';
+    const catCircleR = document.getElementById('catCircle').getBoundingClientRect();
+    const toX = catCircleR.left + catCircleR.width / 2 - sr.left;
+    const ccCards = document.getElementById('contractsGrid').querySelectorAll('.contract-card');
+    ccCards.forEach((card, i) => {
+      const cr = card.getBoundingClientRect();
+      const fromX = cr.left + cr.width / 2 - sr.left;
+      const d = `M ${fromX} 0 C ${fromX} ${sr.height*0.6}, ${toX} ${sr.height*0.4}, ${toX} ${sr.height}`;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d); path.classList.add('cc-flow-line');
+      path.style.stroke = 'rgba(184,160,232,0.18)';
+      ccSvg.appendChild(path);
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('r', '2.5'); dot.classList.add('cc-flow-dot'); dot.style.fill = '#b8a0e8';
+      const am = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
+      am.setAttribute('dur', '3s'); am.setAttribute('repeatCount', 'indefinite');
+      am.setAttribute('begin', (i * 0.6) + 's'); am.setAttribute('path', d);
+      dot.appendChild(am); ccSvg.appendChild(dot);
+    });
+  }, 400);
+
+  // Big catalogue with app icon inside
+  document.getElementById('ccIcon').textContent = sel.icon;
+  const catCircle = document.getElementById('catCircle');
+  catCircle.classList.remove('visible');
+  setTimeout(() => catCircle.classList.add('visible'), 500);
+
+  setTimeout(() => document.getElementById('pubLabel').classList.add('visible'), 900);
+
+  // Users
+  const ur = document.getElementById('usersRow');
+  ur.innerHTML = '';
+  consumers.forEach((u, i) => {
+    const card = document.createElement('div'); card.className = 'user-card';
+    card.innerHTML = `
+      <div class="uc-avatar" style="background:${u.color}18;color:${u.color}"><div class="uc-ring" style="border-color:${u.color}"></div>${u.ini}</div>
+      <div class="uc-name">${u.name}</div>
+      <div class="uc-dept">${u.dept}</div>
+      <div class="uc-using"><span class="ud" style="animation-delay:${i*0.3}s"></span>Using app</div>
+    `;
+    ur.appendChild(card);
+    setTimeout(() => card.classList.add('visible'), 1000 + i * 140);
+  });
+
+  // Download lines from catalogue to users
+  setTimeout(() => {
+    const svg = document.getElementById('dlSvg');
+    const sr = svg.getBoundingClientRect();
+    svg.setAttribute('viewBox', `0 0 ${sr.width} ${sr.height}`);
+    svg.innerHTML = '';
+    const catR = catCircle.getBoundingClientRect();
+    const fromX = catR.left + catR.width / 2 - sr.left;
+    const cards = ur.querySelectorAll('.user-card');
+    cards.forEach((card, i) => {
+      const cR = card.getBoundingClientRect();
+      const toX = cR.left + cR.width / 2 - sr.left;
+      const d = `M ${fromX} 0 C ${fromX} ${sr.height*0.7}, ${toX} ${sr.height*0.3}, ${toX} ${sr.height}`;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d); path.classList.add('dl-line'); path.style.stroke = consumers[i].color + '30';
+      svg.appendChild(path);
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('r', '3'); dot.classList.add('dl-dot'); dot.style.fill = consumers[i].color;
+      const am = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
+      am.setAttribute('dur', '3.5s'); am.setAttribute('repeatCount', 'indefinite');
+      am.setAttribute('begin', (i * 0.5) + 's'); am.setAttribute('path', d);
+      dot.appendChild(am); svg.appendChild(dot);
+    });
+  }, 1100);
+
+  // Continual Governance section
+  setTimeout(() => {
+    const cg = document.getElementById('continualGov');
+    cg.classList.add('visible');
+
+    const cgCycle = document.getElementById('cgCycle');
+    cgCycle.innerHTML = '';
+    continualCycle.forEach((c, i) => {
+      const card = document.createElement('div'); card.className = 'cg-card';
+      card.innerHTML = `<div class="cg-card-icon">${c.icon}</div><div class="cg-card-info"><div class="cg-card-name">${c.name}</div><div class="cg-card-desc">${c.desc}</div></div>`;
+      cgCycle.appendChild(card);
+      setTimeout(() => card.classList.add('visible'), i * 200);
+    });
+
+    const cgEvolve = document.getElementById('cgEvolve');
+    cgEvolve.innerHTML = '';
+    continualEvolve.forEach((c, i) => {
+      const card = document.createElement('div'); card.className = 'cg-card';
+      card.innerHTML = `<div class="cg-card-icon">${c.icon}</div><div class="cg-card-info"><div class="cg-card-name">${c.name}</div><div class="cg-card-desc">${c.desc}</div></div>`;
+      cgEvolve.appendChild(card);
+      setTimeout(() => card.classList.add('visible'), 300 + i * 200);
+    });
+
+    setTimeout(() => scene.scrollTo({ top: scene.scrollHeight, behavior: 'smooth' }), 400);
+  }, 1500);
+
+  setTimeout(() => scene.scrollTo({ top: scene.scrollHeight, behavior: 'smooth' }), 300);
+});
+
+// ── Back ──
+document.getElementById('backBtn').addEventListener('click', () => {
+  if (step === 1) {
+    step = 0;
+    document.getElementById('stageRow1').classList.remove('visible','shrink-1','shrink-2');
+    document.getElementById('btnNextWrap').classList.remove('visible');
+    document.getElementById('stagePicker').classList.remove('hidden');
+    document.getElementById('idaIntro').style.display = '';
+  } else if (step === 2) {
+    step = 1;
+    document.getElementById('stageRow1').classList.remove('shrink-1','shrink-2');
+    document.getElementById('contractsArea').classList.remove('visible','shrink-1');
+    document.getElementById('flowDStoContracts').classList.remove('visible');
+    document.getElementById('btnAgentsWrap').classList.remove('visible');
+    document.getElementById('btnNextWrap').classList.add('visible');
+    setTimeout(drawLRConnections, 100);
+  } else if (step === 3) {
+    step = 2;
+    document.getElementById('contractsArea').classList.remove('shrink-1');
+    document.getElementById('flowContractsToAgents').classList.remove('visible');
+    document.getElementById('agentsArea').classList.remove('visible','shrink-1');
+    document.getElementById('autoActionsPanel').classList.remove('visible');
+    document.getElementById('btnPubWrap').classList.remove('visible');
+    document.getElementById('btnAgentsWrap').classList.add('visible');
+  } else if (step === 4) {
+    step = 3;
+    document.getElementById('stageRow1').classList.remove('shrink-2');
+    document.getElementById('agentsArea').classList.remove('shrink-1');
+    document.getElementById('publishedArea').classList.remove('visible');
+    document.getElementById('continualGov').classList.remove('visible');
+    document.getElementById('catCircle').classList.remove('visible');
+    document.getElementById('pubLabel').classList.remove('visible');
+    document.getElementById('contractCatSvg').innerHTML = '';
+    document.getElementById('dlSvg').innerHTML = '';
+    document.getElementById('btnPubWrap').classList.add('visible');
+  }
+  updateUI();
+  setTimeout(() => scene.scrollTo({ top: step === 0 ? 0 : scene.scrollHeight, behavior: 'smooth' }), 100);
+});
+
+// Redraw connections on resize
+window.addEventListener('resize', () => { if (step >= 1) setTimeout(drawLRConnections, 100); });
+</script>
+
+</body>
+</html>
