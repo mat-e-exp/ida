@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IDA — Technical Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0d0f1a;
+    --bg-light: #141728;
+    --pastel-blue: #7eb8da;
+    --pastel-pink: #e8a0bf;
+    --pastel-green: #a0d995;
+    --pastel-purple: #b8a0e8;
+    --pastel-orange: #e8c4a0;
+    --pastel-teal: #7ed4c0;
+    --pastel-yellow: #e8dfa0;
+    --pastel-red: #e8a0a0;
+    --text: #c8cce0;
+    --text-dim: #6a6f8a;
+    --text-bright: #e8eaf4;
+    --border: rgba(255,255,255,0.06);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── Navigation ── */
+  .nav-link {
+    position: fixed; top: 24px; right: 24px; z-index: 400;
+    background: var(--bg-light); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text-dim);
+    padding: 8px 18px; font-size: 0.65rem; letter-spacing: 0.08em;
+    cursor: pointer; display: flex; align-items: center; gap: 6px;
+    transition: all 0.3s; text-decoration: none;
+    font-family: 'Sora', sans-serif;
+  }
+  .nav-link:hover { border-color: var(--pastel-blue); color: var(--pastel-blue); }
+
+  /* ── Page title ── */
+  .page-title {
+    position: fixed; top: 24px; left: 24px; z-index: 400;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .page-title-name {
+    font-family: 'Sora', sans-serif; font-size: 0.9rem; font-weight: 700;
+    color: var(--pastel-blue); letter-spacing: 0.06em;
+  }
+  .page-title-sub {
+    font-family: 'Sora', sans-serif; font-size: 0.55rem; font-weight: 500;
+    color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase;
+  }
+
+  /* ── Main scrollable area ── */
+  .scene {
+    position: relative; z-index: 1;
+    width: 100vw; height: 100vh;
+    overflow-y: auto; overflow-x: hidden;
+    scroll-behavior: smooth;
+  }
+  .scene::-webkit-scrollbar { width: 4px; }
+  .scene::-webkit-scrollbar-track { background: transparent; }
+  .scene::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 4px; }
+
+  /* ── Three-column layout ── */
+  .arch-container {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 70px 30px 60px;
+    display: flex;
+    gap: 0;
+    align-items: stretch;
+    min-height: calc(100vh - 40px);
+  }
+
+  /* ── Side columns (AI Sources / Enterprise Platform) ── */
+  .side-col {
+    width: 200px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .side-label {
+    font-family: 'Sora', sans-serif;
+    font-size: 0.5rem; font-weight: 600;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    text-align: center;
+    margin-bottom: 6px;
+  }
+  .side-label-left { color: var(--pastel-yellow); }
+  .side-label-right { color: var(--pastel-green); }
+
+  .side-card {
+    background: var(--bg-light);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .side-card:hover {
+    border-color: rgba(255,255,255,0.12);
+  }
+  .side-card-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem; flex-shrink: 0;
+  }
+  .side-card-info { flex: 1; min-width: 0; }
+  .side-card-name {
+    font-family: 'Sora', sans-serif; font-size: 0.58rem; font-weight: 600;
+    color: var(--text);
+  }
+  .side-card-desc {
+    font-size: 0.44rem; color: var(--text-dim); line-height: 1.4; margin-top: 1px;
+  }
+
+  /* AI source cards */
+  .side-card-ai .side-card-icon { background: rgba(232,223,160,0.1); }
+  .side-card-ai:hover { border-color: rgba(232,223,160,0.25); }
+
+  /* Enterprise integration cards */
+  .side-card-ent .side-card-icon { background: rgba(160,217,149,0.1); }
+  .side-card-ent:hover { border-color: rgba(160,217,149,0.25); }
+
+  /* ── Flow arrows (SVG columns between side and center) ── */
+  .flow-col {
+    width: 60px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .flow-col svg {
+    width: 100%; height: 300px;
+    overflow: visible;
+  }
+  .flow-line {
+    stroke-width: 1.2; fill: none; stroke-dasharray: 5 3;
+  }
+  .flow-arrow {
+    fill: none; stroke-width: 1.2;
+  }
+
+  /* ── Center column (IDA — the product) ── */
+  .ida-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    position: relative;
+    border: 2px solid rgba(126,184,218,0.12);
+    border-radius: 20px;
+    padding: 16px;
+    background: rgba(126,184,218,0.02);
+  }
+
+  .ida-col-header {
+    text-align: center;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(126,184,218,0.08);
+  }
+  .ida-col-title {
+    font-family: 'Sora', sans-serif; font-size: 0.8rem; font-weight: 700;
+    color: var(--pastel-blue); letter-spacing: 0.1em;
+  }
+  .ida-col-subtitle {
+    font-size: 0.46rem; color: var(--text-dim); letter-spacing: 0.1em;
+    text-transform: uppercase; margin-top: 3px;
+  }
+
+  /* ── IDA internal layers ── */
+  .ida-layer {
+    position: relative;
+    z-index: 2;
+    border-radius: 14px;
+    padding: 12px 14px 10px;
+    margin-bottom: 6px;
+    border: 1px solid;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  .ida-layer:last-child { margin-bottom: 0; }
+  .ida-layer:hover { transform: translateX(3px); }
+  .ida-layer.expanded { transform: translateX(3px); }
+
+  .ida-layer-header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 8px;
+  }
+  .ida-layer-icon {
+    width: 24px; height: 24px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; flex-shrink: 0;
+  }
+  .ida-layer-title {
+    font-family: 'Sora', sans-serif; font-size: 0.62rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .ida-layer-hint {
+    margin-left: auto; font-size: 0.4rem; color: var(--text-dim);
+    letter-spacing: 0.06em; text-transform: uppercase;
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .ida-layer:hover .ida-layer-hint { opacity: 1; }
+  .ida-layer.expanded .ida-layer-hint { opacity: 1; }
+
+  .ida-layer-components {
+    display: flex; gap: 6px; flex-wrap: wrap;
+  }
+
+  /* Component card */
+  .comp {
+    flex: 1; min-width: 80px;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .comp:hover {
+    border-color: rgba(255,255,255,0.12);
+    background: rgba(0,0,0,0.35);
+  }
+  .comp.active {
+    border-color: rgba(255,255,255,0.18);
+    background: rgba(0,0,0,0.4);
+  }
+  .comp-icon { font-size: 0.85rem; margin-bottom: 3px; display: block; }
+  .comp-name {
+    font-family: 'Sora', sans-serif; font-size: 0.5rem; font-weight: 600;
+    color: var(--text);
+  }
+  .comp-brief {
+    font-size: 0.4rem; color: var(--text-dim); line-height: 1.4; margin-top: 1px;
+  }
+
+  /* Layer colours */
+  .layer-contract {
+    background: rgba(126,184,218,0.04);
+    border-color: rgba(126,184,218,0.12);
+  }
+  .layer-contract .ida-layer-icon { background: rgba(126,184,218,0.12); }
+  .layer-contract .ida-layer-title { color: var(--pastel-blue); }
+  .layer-contract:hover, .layer-contract.expanded {
+    border-color: rgba(126,184,218,0.25);
+    box-shadow: 0 0 25px rgba(126,184,218,0.06);
+  }
+
+  .layer-agents {
+    background: rgba(232,160,160,0.04);
+    border-color: rgba(232,160,160,0.12);
+  }
+  .layer-agents .ida-layer-icon { background: rgba(232,160,160,0.12); }
+  .layer-agents .ida-layer-title { color: var(--pastel-red); }
+  .layer-agents:hover, .layer-agents.expanded {
+    border-color: rgba(232,160,160,0.3);
+    box-shadow: 0 0 25px rgba(232,160,160,0.08);
+  }
+
+  .layer-publish {
+    background: rgba(160,217,149,0.04);
+    border-color: rgba(160,217,149,0.12);
+  }
+  .layer-publish .ida-layer-icon { background: rgba(160,217,149,0.12); }
+  .layer-publish .ida-layer-title { color: var(--pastel-green); }
+  .layer-publish:hover, .layer-publish.expanded {
+    border-color: rgba(160,217,149,0.25);
+    box-shadow: 0 0 25px rgba(160,217,149,0.06);
+  }
+
+  .layer-runtime {
+    background: rgba(184,160,232,0.04);
+    border-color: rgba(184,160,232,0.12);
+  }
+  .layer-runtime .ida-layer-icon { background: rgba(184,160,232,0.12); }
+  .layer-runtime .ida-layer-title { color: var(--pastel-purple); }
+  .layer-runtime:hover, .layer-runtime.expanded {
+    border-color: rgba(184,160,232,0.25);
+    box-shadow: 0 0 25px rgba(184,160,232,0.06);
+  }
+
+  .layer-data {
+    background: rgba(126,212,192,0.04);
+    border-color: rgba(126,212,192,0.12);
+  }
+  .layer-data .ida-layer-icon { background: rgba(126,212,192,0.12); }
+  .layer-data .ida-layer-title { color: var(--pastel-teal); }
+  .layer-data:hover, .layer-data.expanded {
+    border-color: rgba(126,212,192,0.25);
+    box-shadow: 0 0 25px rgba(126,212,192,0.06);
+  }
+
+  /* ── Layer connectors ── */
+  .ida-connector {
+    height: 18px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ida-connector svg { width: 100%; height: 100%; overflow: visible; }
+  .lc-line { stroke-width: 1.2; fill: none; stroke-dasharray: 5 3; }
+
+  /* ── Expanded layer content ── */
+  .ida-layer-detail {
+    display: none;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+  }
+  .ida-layer.expanded .ida-layer-detail {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .ldi {
+    font-size: 0.42rem; color: var(--text-dim); line-height: 1.5;
+    padding: 5px 8px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.03);
+    display: flex; align-items: center; gap: 5px;
+  }
+  .ldi-dot {
+    width: 4px; height: 4px; border-radius: 50%; flex-shrink: 0;
+  }
+
+  /* ── Enforcement sidebar ── */
+  .enf-col {
+    width: 120px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: center;
+    padding-left: 16px;
+  }
+
+  .enf-label {
+    font-family: 'Sora', sans-serif;
+    font-size: 0.46rem; font-weight: 600;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--text-dim);
+    text-align: center;
+    margin-bottom: 2px;
+  }
+
+  .enf-bar {
+    border-radius: 10px;
+    padding: 12px 10px;
+    text-align: center;
+    border: 1px solid;
+    transition: all 0.3s;
+  }
+  .enf-bar:hover { transform: scale(1.03); }
+  .enf-icon { font-size: 0.9rem; display: block; margin-bottom: 4px; }
+  .enf-title {
+    font-family: 'Sora', sans-serif; font-size: 0.48rem; font-weight: 600;
+    letter-spacing: 0.06em; margin-bottom: 3px;
+  }
+  .enf-desc {
+    font-size: 0.38rem; color: var(--text-dim); line-height: 1.5;
+  }
+
+  .enf-build {
+    background: rgba(160,217,149,0.04);
+    border-color: rgba(160,217,149,0.15);
+  }
+  .enf-build .enf-title { color: var(--pastel-green); }
+
+  .enf-deploy {
+    background: rgba(232,160,160,0.04);
+    border-color: rgba(232,160,160,0.15);
+  }
+  .enf-deploy .enf-title { color: var(--pastel-red); }
+
+  .enf-runtime {
+    background: rgba(184,160,232,0.04);
+    border-color: rgba(184,160,232,0.15);
+  }
+  .enf-runtime .enf-title { color: var(--pastel-purple); }
+
+  /* ── Detail panel ── */
+  .detail-panel {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    width: 300px;
+    background: rgba(13,15,26,0.92);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    backdrop-filter: blur(12px);
+    padding: 18px 20px;
+    z-index: 400;
+    opacity: 0;
+    transform: translateY(10px);
+    pointer-events: none;
+    transition: all 0.3s ease;
+  }
+  .detail-panel.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+  .detail-close {
+    position: absolute; top: 10px; right: 12px;
+    background: none; border: none; color: var(--text-dim);
+    cursor: pointer; font-size: 0.8rem; transition: color 0.3s;
+  }
+  .detail-close:hover { color: var(--text-bright); }
+  .detail-layer {
+    font-size: 0.44rem; letter-spacing: 0.15em; text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .detail-title {
+    font-family: 'Sora', sans-serif; font-size: 0.85rem; font-weight: 600;
+    color: var(--text-bright); margin-bottom: 8px;
+  }
+  .detail-desc {
+    font-size: 0.58rem; color: var(--text-dim); line-height: 1.7;
+    margin-bottom: 12px;
+  }
+  .detail-tags {
+    display: flex; flex-wrap: wrap; gap: 5px;
+  }
+  .detail-tag {
+    font-size: 0.44rem; padding: 3px 9px; border-radius: 20px;
+    letter-spacing: 0.04em; font-weight: 500;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+
+<div class="page-title">
+  <div class="page-title-name">IDA</div>
+  <div class="page-title-sub">Technical Architecture</div>
+</div>
+
+<a class="nav-link" href="index.html">&larr; User Flow</a>
+
+<div class="scene" id="scene">
+  <div class="arch-container">
+
+    <!-- LEFT: AI App Sources -->
+    <div class="side-col">
+      <div class="side-label side-label-left">AI App Sources</div>
+
+      <div class="side-card side-card-ai" data-comp="ai-copilot">
+        <div class="side-card-icon">🤖</div>
+        <div class="side-card-info">
+          <div class="side-card-name">AI Copilots</div>
+          <div class="side-card-desc">Claude, Copilot, Cursor — code generation tools</div>
+        </div>
+      </div>
+      <div class="side-card side-card-ai" data-comp="ai-agents">
+        <div class="side-card-icon">🧠</div>
+        <div class="side-card-info">
+          <div class="side-card-name">AI Agents</div>
+          <div class="side-card-desc">Autonomous builders that generate full apps</div>
+        </div>
+      </div>
+      <div class="side-card side-card-ai" data-comp="ai-lowcode">
+        <div class="side-card-icon">⚡</div>
+        <div class="side-card-info">
+          <div class="side-card-name">Low-Code / No-Code</div>
+          <div class="side-card-desc">AI-assisted visual app builders</div>
+        </div>
+      </div>
+      <div class="side-card side-card-ai" data-comp="ai-citizen">
+        <div class="side-card-icon">👤</div>
+        <div class="side-card-info">
+          <div class="side-card-name">Citizen Developers</div>
+          <div class="side-card-desc">Non-engineers using AI to build tools</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEFT FLOW ARROWS -->
+    <div class="flow-col">
+      <svg viewBox="0 0 60 300">
+        <line class="flow-line" x1="10" y1="50" x2="50" y2="80" stroke="rgba(232,223,160,0.2)" />
+        <line class="flow-line" x1="10" y1="120" x2="50" y2="120" stroke="rgba(232,223,160,0.2)" />
+        <line class="flow-line" x1="10" y1="180" x2="50" y2="165" stroke="rgba(232,223,160,0.2)" />
+        <line class="flow-line" x1="10" y1="240" x2="50" y2="210" stroke="rgba(232,223,160,0.2)" />
+        <!-- Arrow heads -->
+        <polygon points="50,77 44,73 44,81" fill="rgba(232,223,160,0.25)" />
+        <polygon points="50,117 44,113 44,121" fill="rgba(232,223,160,0.25)" />
+        <polygon points="50,162 44,158 44,166" fill="rgba(232,223,160,0.25)" />
+        <polygon points="50,207 44,203 44,211" fill="rgba(232,223,160,0.25)" />
+      </svg>
+    </div>
+
+    <!-- CENTER: IDA (the product) -->
+    <div class="ida-col">
+      <div class="ida-col-header">
+        <div class="ida-col-title">IDA</div>
+        <div class="ida-col-subtitle">Governance & Publishing Layer for AI-Created Apps</div>
+      </div>
+
+      <!-- Contract Engine -->
+      <div class="ida-layer layer-contract" data-layer="contract">
+        <div class="ida-layer-header">
+          <div class="ida-layer-icon">📜</div>
+          <div class="ida-layer-title">Contract Engine</div>
+          <div class="ida-layer-hint">click to expand</div>
+        </div>
+        <div class="ida-layer-components">
+          <div class="comp" data-comp="contract-validator">
+            <div class="comp-icon">✅</div>
+            <div class="comp-name">Validator</div>
+            <div class="comp-brief">Contract compliance</div>
+          </div>
+          <div class="comp" data-comp="contract-dsl">
+            <div class="comp-icon">📝</div>
+            <div class="comp-name">Contract DSL</div>
+            <div class="comp-brief">Rule definitions</div>
+          </div>
+          <div class="comp" data-comp="contract-templates">
+            <div class="comp-icon">📋</div>
+            <div class="comp-name">Templates</div>
+            <div class="comp-brief">Per app type</div>
+          </div>
+          <div class="comp" data-comp="contract-cicd">
+            <div class="comp-icon">🔄</div>
+            <div class="comp-name">CI/CD Hooks</div>
+            <div class="comp-brief">Pipeline gates</div>
+          </div>
+        </div>
+        <div class="ida-layer-detail">
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-blue)"></span>Contracts define what an AI-built app must comply with to be published</div>
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-blue)"></span>Data access scoping, security requirements, operational standards</div>
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-blue)"></span>Auto-generates contract boilerplate based on app type</div>
+        </div>
+      </div>
+
+      <div class="ida-connector">
+        <svg viewBox="0 0 600 18">
+          <line class="lc-line" x1="300" y1="0" x2="300" y2="18" stroke="rgba(126,184,218,0.15)" />
+        </svg>
+      </div>
+
+      <!-- Agent Runtime -->
+      <div class="ida-layer layer-agents" data-layer="agents">
+        <div class="ida-layer-header">
+          <div class="ida-layer-icon">🤖</div>
+          <div class="ida-layer-title">Agent Runtime</div>
+          <div class="ida-layer-hint">click to expand</div>
+        </div>
+        <div class="ida-layer-components">
+          <div class="comp" data-comp="agent-itsm">
+            <div class="comp-icon">🎫</div>
+            <div class="comp-name">ITSM</div>
+            <div class="comp-brief">Service mgmt</div>
+          </div>
+          <div class="comp" data-comp="agent-deps">
+            <div class="comp-icon">📦</div>
+            <div class="comp-name">Dependencies</div>
+            <div class="comp-brief">Supply chain</div>
+          </div>
+          <div class="comp" data-comp="agent-opmodel">
+            <div class="comp-icon">⚙️</div>
+            <div class="comp-name">Op Model</div>
+            <div class="comp-brief">Standards</div>
+          </div>
+          <div class="comp" data-comp="agent-docs">
+            <div class="comp-icon">📝</div>
+            <div class="comp-name">Docs</div>
+            <div class="comp-brief">Compliance</div>
+          </div>
+          <div class="comp" data-comp="agent-mon">
+            <div class="comp-icon">📊</div>
+            <div class="comp-name">Monitoring</div>
+            <div class="comp-brief">Health</div>
+          </div>
+          <div class="comp" data-comp="agent-sec">
+            <div class="comp-icon">🛡️</div>
+            <div class="comp-name">Security</div>
+            <div class="comp-brief">Threats</div>
+          </div>
+        </div>
+        <div class="ida-layer-detail">
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-red)"></span>6 agents run continuously — not just at deploy time</div>
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-red)"></span>Event bus for inter-agent communication</div>
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-red)"></span>Learning store persists patterns across reviews</div>
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-red)"></span>Action engine for automated remediation</div>
+        </div>
+      </div>
+
+      <div class="ida-connector">
+        <svg viewBox="0 0 600 18">
+          <line class="lc-line" x1="300" y1="0" x2="300" y2="18" stroke="rgba(232,160,160,0.15)" />
+        </svg>
+      </div>
+
+      <!-- Publish Gate -->
+      <div class="ida-layer layer-publish" data-layer="publish">
+        <div class="ida-layer-header">
+          <div class="ida-layer-icon">🚦</div>
+          <div class="ida-layer-title">Publish Gate</div>
+          <div class="ida-layer-hint">click to expand</div>
+        </div>
+        <div class="ida-layer-components">
+          <div class="comp" data-comp="gate-verdict">
+            <div class="comp-icon">⚖️</div>
+            <div class="comp-name">Verdict Engine</div>
+            <div class="comp-brief">Agent consensus</div>
+          </div>
+          <div class="comp" data-comp="gate-catalogue">
+            <div class="comp-icon">📚</div>
+            <div class="comp-name">Catalogue Service</div>
+            <div class="comp-brief">Publish to IDP</div>
+          </div>
+          <div class="comp" data-comp="gate-identity">
+            <div class="comp-icon">🔐</div>
+            <div class="comp-name">Identity Bridge</div>
+            <div class="comp-brief">Enterprise IdP</div>
+          </div>
+        </div>
+        <div class="ida-layer-detail">
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-green)"></span>All 6 agents must approve before publish</div>
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-green)"></span>Publishes approved apps to existing enterprise IDP catalogue</div>
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-green)"></span>Maps IDA contracts to enterprise access controls</div>
+        </div>
+      </div>
+
+      <div class="ida-connector">
+        <svg viewBox="0 0 600 18">
+          <line class="lc-line" x1="300" y1="0" x2="300" y2="18" stroke="rgba(160,217,149,0.15)" />
+        </svg>
+      </div>
+
+      <!-- Runtime Enforcement -->
+      <div class="ida-layer layer-runtime" data-layer="runtime">
+        <div class="ida-layer-header">
+          <div class="ida-layer-icon">🔒</div>
+          <div class="ida-layer-title">Runtime Enforcement</div>
+          <div class="ida-layer-hint">click to expand</div>
+        </div>
+        <div class="ida-layer-components">
+          <div class="comp" data-comp="rt-sidecar">
+            <div class="comp-icon">🔗</div>
+            <div class="comp-name">Sidecar Proxy</div>
+            <div class="comp-brief">Contract enforcement</div>
+          </div>
+          <div class="comp" data-comp="rt-audit">
+            <div class="comp-icon">📋</div>
+            <div class="comp-name">Audit Stream</div>
+            <div class="comp-brief">Immutable log</div>
+          </div>
+          <div class="comp" data-comp="rt-alerts">
+            <div class="comp-icon">🚨</div>
+            <div class="comp-name">Violation Alerts</div>
+            <div class="comp-brief">Real-time response</div>
+          </div>
+        </div>
+        <div class="ida-layer-detail">
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-purple)"></span>Sidecar injected into app's runtime environment</div>
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-purple)"></span>Enforces data access contracts at network level</div>
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-purple)"></span>Feeds violations back to Agent Runtime for learning</div>
+        </div>
+      </div>
+
+      <div class="ida-connector">
+        <svg viewBox="0 0 600 18">
+          <line class="lc-line" x1="300" y1="0" x2="300" y2="18" stroke="rgba(184,160,232,0.15)" />
+        </svg>
+      </div>
+
+      <!-- IDA Data -->
+      <div class="ida-layer layer-data" data-layer="data">
+        <div class="ida-layer-header">
+          <div class="ida-layer-icon">💾</div>
+          <div class="ida-layer-title">IDA Data</div>
+          <div class="ida-layer-hint">click to expand</div>
+        </div>
+        <div class="ida-layer-components">
+          <div class="comp" data-comp="data-contracts">
+            <div class="comp-icon">📜</div>
+            <div class="comp-name">Contract Store</div>
+            <div class="comp-brief">Versioned rules</div>
+          </div>
+          <div class="comp" data-comp="data-agent-state">
+            <div class="comp-icon">🧠</div>
+            <div class="comp-name">Agent State</div>
+            <div class="comp-brief">Learning store</div>
+          </div>
+          <div class="comp" data-comp="data-audit">
+            <div class="comp-icon">📋</div>
+            <div class="comp-name">Audit Log</div>
+            <div class="comp-brief">Immutable</div>
+          </div>
+        </div>
+        <div class="ida-layer-detail">
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-teal)"></span>Contract store is versioned — full history of rule changes</div>
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-teal)"></span>Agent state enables learning across reviews</div>
+          <div class="ldi"><span class="ldi-dot" style="background:var(--pastel-teal)"></span>Audit log is append-only, tamper-proof</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT FLOW ARROWS -->
+    <div class="flow-col">
+      <svg viewBox="0 0 60 300">
+        <line class="flow-line" x1="10" y1="100" x2="50" y2="60" stroke="rgba(160,217,149,0.2)" />
+        <line class="flow-line" x1="10" y1="140" x2="50" y2="130" stroke="rgba(160,217,149,0.2)" />
+        <line class="flow-line" x1="10" y1="180" x2="50" y2="195" stroke="rgba(160,217,149,0.2)" />
+        <line class="flow-line" x1="10" y1="220" x2="50" y2="255" stroke="rgba(160,217,149,0.2)" />
+        <!-- Arrow heads -->
+        <polygon points="50,57 44,53 44,61" fill="rgba(160,217,149,0.25)" />
+        <polygon points="50,127 44,123 44,131" fill="rgba(160,217,149,0.25)" />
+        <polygon points="50,192 44,188 44,196" fill="rgba(160,217,149,0.25)" />
+        <polygon points="50,252 44,248 44,256" fill="rgba(160,217,149,0.25)" />
+      </svg>
+    </div>
+
+    <!-- RIGHT: Enterprise Platform (existing) -->
+    <div class="side-col">
+      <div class="side-label side-label-right">Enterprise Platform (Existing)</div>
+
+      <div class="side-card side-card-ent" data-comp="ent-idp">
+        <div class="side-card-icon">🏢</div>
+        <div class="side-card-info">
+          <div class="side-card-name">IDP / Backstage</div>
+          <div class="side-card-desc">Existing developer platform & catalogue</div>
+        </div>
+      </div>
+      <div class="side-card side-card-ent" data-comp="ent-cicd">
+        <div class="side-card-icon">🔄</div>
+        <div class="side-card-info">
+          <div class="side-card-name">CI/CD Pipelines</div>
+          <div class="side-card-desc">GitHub Actions, GitLab CI, Jenkins</div>
+        </div>
+      </div>
+      <div class="side-card side-card-ent" data-comp="ent-k8s">
+        <div class="side-card-icon">☸️</div>
+        <div class="side-card-info">
+          <div class="side-card-name">Infrastructure</div>
+          <div class="side-card-desc">K8s, cloud, networking — already exists</div>
+        </div>
+      </div>
+      <div class="side-card side-card-ent" data-comp="ent-identity">
+        <div class="side-card-icon">🔐</div>
+        <div class="side-card-info">
+          <div class="side-card-name">Identity Provider</div>
+          <div class="side-card-desc">Enterprise SAML / OIDC — already exists</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Enforcement sidebar -->
+    <div class="enf-col">
+      <div class="enf-label">Enforcement</div>
+
+      <div class="enf-bar enf-build">
+        <div class="enf-icon">🔨</div>
+        <div class="enf-title">Build</div>
+        <div class="enf-desc">Contract validation in CI/CD pipeline</div>
+      </div>
+
+      <div class="enf-bar enf-deploy">
+        <div class="enf-icon">🚦</div>
+        <div class="enf-title">Deploy</div>
+        <div class="enf-desc">Agent review gate before publish</div>
+      </div>
+
+      <div class="enf-bar enf-runtime">
+        <div class="enf-icon">🔒</div>
+        <div class="enf-title">Runtime</div>
+        <div class="enf-desc">Sidecar proxy continuous enforcement</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Detail panel -->
+<div class="detail-panel" id="detailPanel">
+  <button class="detail-close" id="detailClose">&times;</button>
+  <div class="detail-layer" id="detailLayer"></div>
+  <div class="detail-title" id="detailTitle"></div>
+  <div class="detail-desc" id="detailDesc"></div>
+  <div class="detail-tags" id="detailTags"></div>
+</div>
+
+<script>
+const compData = {
+  // AI Sources
+  'ai-copilot': {
+    layer: 'AI App Sources', color: 'var(--pastel-yellow)',
+    title: 'AI Copilots',
+    desc: 'Code generation tools like Claude, GitHub Copilot, and Cursor. Developers use these to rapidly build internal applications. IDA governs what these tools produce before it reaches the enterprise catalogue.',
+    tags: ['Claude', 'Copilot', 'Cursor', 'Code Gen']
+  },
+  'ai-agents': {
+    layer: 'AI App Sources', color: 'var(--pastel-yellow)',
+    title: 'Autonomous AI Agents',
+    desc: 'AI agents that generate complete applications end-to-end with minimal human guidance. These create the highest governance risk — the app may work correctly but violate enterprise policies the AI was unaware of.',
+    tags: ['Autonomous', 'Full App Gen', 'High Risk', 'High Speed']
+  },
+  'ai-lowcode': {
+    layer: 'AI App Sources', color: 'var(--pastel-yellow)',
+    title: 'Low-Code / No-Code',
+    desc: 'AI-assisted visual app builders and workflow tools. Often used by teams outside engineering. IDA ensures these apps meet the same governance standards as traditionally built software.',
+    tags: ['Visual Builder', 'Workflows', 'Non-Engineering']
+  },
+  'ai-citizen': {
+    layer: 'AI App Sources', color: 'var(--pastel-yellow)',
+    title: 'Citizen Developers',
+    desc: 'Non-engineers using AI to build internal tools for their teams. This is the fastest-growing source of enterprise apps and the most likely to bypass governance without a system like IDA.',
+    tags: ['Non-Engineers', 'Business Users', 'Shadow IT Risk']
+  },
+  // Contract Engine
+  'contract-validator': {
+    layer: 'Contract Engine', color: 'var(--pastel-blue)',
+    title: 'Contract Validator',
+    desc: 'Validates that an AI-generated app satisfies all contract requirements. Checks data access scoping, authentication hooks, API boundaries, and operational standards before the app proceeds to agent review.',
+    tags: ['Validation', 'Compliance Check', 'Pre-Agent Gate']
+  },
+  'contract-dsl': {
+    layer: 'Contract Engine', color: 'var(--pastel-blue)',
+    title: 'Contract DSL',
+    desc: 'Domain-specific language for defining contracts. Human-readable, machine-enforceable. Defines what data an app can access, what APIs it can call, what permissions it requires, and what standards it must meet.',
+    tags: ['DSL', 'Rule Language', 'Human-Readable']
+  },
+  'contract-templates': {
+    layer: 'Contract Engine', color: 'var(--pastel-blue)',
+    title: 'Contract Templates',
+    desc: 'Pre-built contract templates for common app types. AI copilots and agents can auto-attach the correct template. Reduces friction — developers get governance by default, not as an afterthought.',
+    tags: ['Auto-Attach', 'Per App Type', 'Governance by Default']
+  },
+  'contract-cicd': {
+    layer: 'Contract Engine', color: 'var(--pastel-blue)',
+    title: 'CI/CD Hooks',
+    desc: 'Integrates with the enterprise\'s existing CI/CD pipeline. Contract validation runs as a build step — apps that violate their contract cannot merge. Plugs into GitHub Actions, GitLab CI, Jenkins.',
+    tags: ['Build Gate', 'Pipeline Plugin', 'Existing CI/CD']
+  },
+  // Agent Runtime
+  'agent-itsm': {
+    layer: 'Agent Runtime', color: 'var(--pastel-red)',
+    title: 'ITSM Agent',
+    desc: 'Validates IT Service Management compliance. Checks change management records, incident categorisation, service catalogue entries, and CMDB registration.',
+    tags: ['Change Mgmt', 'CMDB', 'Service Catalogue', 'Continuous']
+  },
+  'agent-deps': {
+    layer: 'Agent Runtime', color: 'var(--pastel-red)',
+    title: 'Dependencies Agent',
+    desc: 'Analyses dependency supply chain. Scans for known vulnerabilities (CVEs), licence compliance, deprecated packages, and dependency freshness. Critical for AI-generated code which often pulls in untested dependencies.',
+    tags: ['CVE Scan', 'License', 'Supply Chain', 'Continuous']
+  },
+  'agent-opmodel': {
+    layer: 'Agent Runtime', color: 'var(--pastel-red)',
+    title: 'Operating Model Agent',
+    desc: 'Enforces enterprise operating standards. Validates naming conventions, deployment patterns, resource tagging, cost allocation, and organisational policies.',
+    tags: ['Standards', 'Tagging', 'Cost', 'Continuous']
+  },
+  'agent-docs': {
+    layer: 'Agent Runtime', color: 'var(--pastel-red)',
+    title: 'Documentation Agent',
+    desc: 'Ensures documentation compliance. Validates API docs, user guides, runbooks, and architecture decision records. AI-generated apps often lack operational documentation.',
+    tags: ['API Docs', 'Runbooks', 'ADRs', 'Continuous']
+  },
+  'agent-mon': {
+    layer: 'Agent Runtime', color: 'var(--pastel-red)',
+    title: 'Monitoring Agent',
+    desc: 'Validates monitoring and alerting coverage. Checks health endpoints, metric instrumentation, alert rules, and SLO definitions.',
+    tags: ['Health Checks', 'SLOs', 'Alerting', 'Continuous']
+  },
+  'agent-sec': {
+    layer: 'Agent Runtime', color: 'var(--pastel-red)',
+    title: 'Security Agent',
+    desc: 'Continuous security analysis. Static analysis, secret detection, network policy validation, and container image scanning. Essential for AI-generated code which may introduce subtle vulnerabilities.',
+    tags: ['SAST', 'Secrets', 'Network Policy', 'Continuous']
+  },
+  // Publish Gate
+  'gate-verdict': {
+    layer: 'Publish Gate', color: 'var(--pastel-green)',
+    title: 'Verdict Engine',
+    desc: 'Aggregates verdicts from all 6 agents. All must approve for the app to be published. Provides a clear audit trail of why an app was approved or rejected, with specific remediation steps.',
+    tags: ['Consensus', 'All-Agent Approval', 'Remediation']
+  },
+  'gate-catalogue': {
+    layer: 'Publish Gate', color: 'var(--pastel-green)',
+    title: 'Catalogue Service',
+    desc: 'Publishes approved apps to the enterprise\'s existing IDP catalogue (e.g., Backstage). IDA doesn\'t replace the catalogue — it feeds governed, approved apps into it.',
+    tags: ['Backstage Plugin', 'IDP Integration', 'Publishing']
+  },
+  'gate-identity': {
+    layer: 'Publish Gate', color: 'var(--pastel-green)',
+    title: 'Identity Bridge',
+    desc: 'Maps IDA contract access controls to the enterprise\'s existing identity provider. Ensures contract-defined data scoping is enforced through the same SAML/OIDC system the enterprise already uses.',
+    tags: ['SAML Bridge', 'OIDC', 'Access Mapping']
+  },
+  // Runtime Enforcement
+  'rt-sidecar': {
+    layer: 'Runtime Enforcement', color: 'var(--pastel-purple)',
+    title: 'Sidecar Proxy',
+    desc: 'Injected into the app\'s existing runtime environment (the enterprise\'s K8s cluster). Enforces data access contracts at the network level — blocking unauthorised API calls and enforcing read/write permissions.',
+    tags: ['Network Level', 'Data Access', 'Zero Trust']
+  },
+  'rt-audit': {
+    layer: 'Runtime Enforcement', color: 'var(--pastel-purple)',
+    title: 'Audit Stream',
+    desc: 'Streams all data access events to IDA\'s immutable audit log. Provides a complete record of what every AI-built app accessed, when, and whether it was within contract scope.',
+    tags: ['Immutable', 'Real-Time', 'Compliance']
+  },
+  'rt-alerts': {
+    layer: 'Runtime Enforcement', color: 'var(--pastel-purple)',
+    title: 'Violation Alerts',
+    desc: 'Real-time alerting when an app attempts to violate its contract at runtime. Can auto-revoke access, notify security teams, and feed the violation back to agents for pattern learning.',
+    tags: ['Auto-Revoke', 'Notifications', 'Agent Feedback']
+  },
+  // IDA Data
+  'data-contracts': {
+    layer: 'IDA Data', color: 'var(--pastel-teal)',
+    title: 'Contract Store',
+    desc: 'Versioned, immutable storage for all contract definitions. Every change creates a new version. Full history of what rules applied to which app at what time.',
+    tags: ['Versioned', 'Immutable', 'Rule History']
+  },
+  'data-agent-state': {
+    layer: 'IDA Data', color: 'var(--pastel-teal)',
+    title: 'Agent State & Learning Store',
+    desc: 'Persists agent memory and learned patterns. Enables agents to recognise recurring issues across AI-generated apps and improve review quality over time.',
+    tags: ['Agent Memory', 'Patterns', 'Improving Over Time']
+  },
+  'data-audit': {
+    layer: 'IDA Data', color: 'var(--pastel-teal)',
+    title: 'Audit Log',
+    desc: 'Append-only audit trail. Every contract validation, agent decision, publish event, and runtime data access. Cannot be modified or deleted. Powers compliance reporting.',
+    tags: ['Append-Only', 'Tamper-Proof', 'Compliance']
+  },
+  // Enterprise Platform
+  'ent-idp': {
+    layer: 'Enterprise Platform', color: 'var(--pastel-green)',
+    title: 'IDP / Backstage',
+    desc: 'The enterprise\'s existing internal developer platform and app catalogue. IDA publishes approved apps here — it doesn\'t replace the catalogue, it governs what enters it.',
+    tags: ['Existing', 'Backstage', 'Port', 'Cortex']
+  },
+  'ent-cicd': {
+    layer: 'Enterprise Platform', color: 'var(--pastel-green)',
+    title: 'CI/CD Pipelines',
+    desc: 'The enterprise\'s existing build and deployment pipelines. IDA hooks into these as a build step — contract validation runs alongside existing tests and checks.',
+    tags: ['Existing', 'GitHub Actions', 'GitLab CI', 'Jenkins']
+  },
+  'ent-k8s': {
+    layer: 'Enterprise Platform', color: 'var(--pastel-green)',
+    title: 'Infrastructure',
+    desc: 'The enterprise\'s existing Kubernetes clusters, cloud accounts, and networking. IDA deploys its sidecar proxy into this environment but doesn\'t own or manage the infrastructure.',
+    tags: ['Existing', 'K8s', 'AWS/Azure/GCP']
+  },
+  'ent-identity': {
+    layer: 'Enterprise Platform', color: 'var(--pastel-green)',
+    title: 'Identity Provider',
+    desc: 'The enterprise\'s existing SAML or OIDC identity provider. IDA\'s Identity Bridge maps contract access controls to existing enterprise roles and groups.',
+    tags: ['Existing', 'SAML', 'OIDC', 'Active Directory']
+  }
+};
+
+// Detail panel
+const detailPanel = document.getElementById('detailPanel');
+const detailClose = document.getElementById('detailClose');
+const detailLayer = document.getElementById('detailLayer');
+const detailTitle = document.getElementById('detailTitle');
+const detailDesc = document.getElementById('detailDesc');
+const detailTags = document.getElementById('detailTags');
+
+let activeComp = null;
+
+function showDetail(compKey) {
+  const data = compData[compKey];
+  if (!data) return;
+  if (activeComp) activeComp.classList.remove('active');
+  const el = document.querySelector(`[data-comp="${compKey}"]`);
+  if (el) { el.classList.add('active'); activeComp = el; }
+  detailLayer.textContent = data.layer;
+  detailLayer.style.color = data.color;
+  detailTitle.textContent = data.title;
+  detailDesc.textContent = data.desc;
+  detailTags.innerHTML = data.tags.map(t => `<span class="detail-tag">${t}</span>`).join('');
+  detailPanel.classList.add('visible');
+}
+
+function hideDetail() {
+  detailPanel.classList.remove('visible');
+  if (activeComp) { activeComp.classList.remove('active'); activeComp = null; }
+}
+
+detailClose.addEventListener('click', hideDetail);
+
+// Click on components (both .comp and .side-card)
+document.querySelectorAll('.comp, .side-card').forEach(el => {
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const key = el.dataset.comp;
+    if (activeComp === el) { hideDetail(); } else { showDetail(key); }
+  });
+});
+
+// Layer expand/collapse
+document.querySelectorAll('.ida-layer').forEach(layer => {
+  layer.addEventListener('click', (e) => {
+    if (e.target.closest('.comp')) return;
+    layer.classList.toggle('expanded');
+  });
+});
+
+// Close detail on outside click
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.comp') && !e.target.closest('.side-card') && !e.target.closest('.detail-panel')) {
+    hideDetail();
+  }
+});
+</script>
+</body>
+</html>
