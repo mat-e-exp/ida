@@ -443,6 +443,113 @@
     background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
     color: var(--text-dim);
   }
+
+  /* ── Mobile / vertical connector ── */
+  .v-conn {
+    display: none;
+    height: 28px;
+    justify-content: center;
+    align-items: center;
+  }
+  .v-conn svg { width: 40px; height: 100%; overflow: visible; }
+
+  /* ══════════════════════════════════
+     MOBILE RESPONSIVE
+     ══════════════════════════════════ */
+  @media (max-width: 900px) {
+    body { overflow: auto; height: auto; }
+
+    .page-title { position: relative; top: auto; left: auto; padding: 16px 16px 0; }
+    .page-title-name { font-size: 0.8rem; }
+
+    .nav-link {
+      position: relative; top: auto; right: auto;
+      margin: 12px 16px 0; display: inline-flex;
+      font-size: 0.6rem; padding: 6px 14px;
+    }
+
+    .scene { height: auto; overflow: visible; }
+
+    .arch-container {
+      flex-direction: column;
+      padding: 16px;
+      gap: 0;
+      align-items: stretch;
+      min-height: auto;
+    }
+
+    /* Side columns become full-width stacked sections */
+    .side-col {
+      width: 100%;
+      gap: 8px;
+    }
+
+    .side-card {
+      padding: 10px 12px;
+    }
+    .side-card-icon { width: 28px; height: 28px; font-size: 0.8rem; }
+    .side-card-name { font-size: 0.55rem; }
+    .side-card-desc { font-size: 0.42rem; }
+
+    /* Hide horizontal flow arrow columns */
+    .flow-col { display: none; }
+
+    /* Show vertical connectors */
+    .v-conn { display: flex; }
+
+    /* IDA center column full width */
+    .ida-col {
+      padding: 12px;
+      border-radius: 16px;
+    }
+    .ida-col-title { font-size: 0.7rem; }
+    .ida-col-subtitle { font-size: 0.42rem; }
+
+    .ida-layer { padding: 10px 12px 8px; margin-bottom: 4px; }
+    .ida-layer-title { font-size: 0.56rem; }
+    .ida-layer-icon { width: 22px; height: 22px; font-size: 0.7rem; }
+    .ida-layer-hint { font-size: 0.38rem; }
+
+    .ida-layer-components { gap: 5px; }
+
+    .comp { min-width: 70px; padding: 7px 8px; }
+    .comp-icon { font-size: 0.75rem; margin-bottom: 2px; }
+    .comp-name { font-size: 0.46rem; }
+    .comp-brief { font-size: 0.38rem; }
+
+    .ida-connector { height: 14px; }
+
+    .ldi { font-size: 0.4rem; padding: 4px 7px; }
+
+    /* Enforcement column becomes horizontal row at bottom */
+    .enf-col {
+      width: 100%;
+      flex-direction: row;
+      padding-left: 0;
+      padding-top: 0;
+      gap: 8px;
+    }
+    .enf-label { width: 100%; margin-bottom: 0; }
+    .enf-bar { flex: 1; padding: 10px 8px; }
+    .enf-icon { font-size: 0.8rem; margin-bottom: 3px; }
+    .enf-title { font-size: 0.44rem; }
+    .enf-desc { font-size: 0.36rem; }
+
+    /* Detail panel full width at bottom */
+    .detail-panel {
+      left: 12px; right: 12px; bottom: 12px;
+      width: auto;
+      position: fixed;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .ida-layer-components { flex-wrap: wrap; }
+    .comp { min-width: calc(50% - 4px); flex: none; }
+
+    .enf-col { flex-wrap: wrap; }
+    .enf-bar { min-width: calc(33% - 6px); }
+  }
 </style>
 </head>
 <body>
@@ -489,6 +596,14 @@
           <div class="side-card-desc">Non-engineers using AI to build tools</div>
         </div>
       </div>
+    </div>
+
+    <!-- Vertical connector (mobile: AI Sources → IDA) -->
+    <div class="v-conn">
+      <svg viewBox="0 0 40 28">
+        <line class="lc-line" x1="20" y1="0" x2="20" y2="28" stroke="rgba(232,223,160,0.2)" />
+        <polygon points="20,28 16,20 24,20" fill="rgba(232,223,160,0.25)" />
+      </svg>
     </div>
 
     <!-- LEFT FLOW ARROWS -->
@@ -714,6 +829,14 @@
       </div>
     </div>
 
+    <!-- Vertical connector (mobile: IDA → Enterprise Platform) -->
+    <div class="v-conn">
+      <svg viewBox="0 0 40 28">
+        <line class="lc-line" x1="20" y1="0" x2="20" y2="28" stroke="rgba(160,217,149,0.2)" />
+        <polygon points="20,28 16,20 24,20" fill="rgba(160,217,149,0.25)" />
+      </svg>
+    </div>
+
     <!-- RIGHT FLOW ARROWS -->
     <div class="flow-col">
       <svg viewBox="0 0 60 300">
@@ -761,6 +884,13 @@
           <div class="side-card-desc">Enterprise SAML / OIDC — already exists</div>
         </div>
       </div>
+    </div>
+
+    <!-- Vertical connector (mobile: Enterprise → Enforcement) -->
+    <div class="v-conn">
+      <svg viewBox="0 0 40 28">
+        <line class="lc-line" x1="20" y1="0" x2="20" y2="28" stroke="rgba(255,255,255,0.1)" />
+      </svg>
     </div>
 
     <!-- Enforcement sidebar -->
